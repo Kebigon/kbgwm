@@ -30,7 +30,7 @@ void setupEvents()
 	{
 		xcb_keycode_t *keycode = xcb_key_symbols_get_keycode(syms, keys[i].key);
 
-		xcb_grab_key(c, 1, root, keys[i].modifiers, keycode,
+		xcb_grab_key(c, 1, root, keys[i].modifiers, *keycode,
 		             XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC);
 
 		free(keycode);
