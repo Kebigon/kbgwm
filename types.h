@@ -3,7 +3,7 @@
 
 typedef union
 {
-
+	const uint_least8_t i;
 	const char** cmd;
 }
 Arg;
@@ -36,10 +36,9 @@ typedef struct window window;
 struct window
 {
 	xcb_window_t id;
-	int_least16_t x,
-	              y;
-	uint_least16_t width,
-	               height;
+	int_least16_t x, y;
+	uint_least16_t width, height;
+	uint_least8_t workspace;
 	window* next;
 };
 

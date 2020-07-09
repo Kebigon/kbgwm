@@ -15,8 +15,14 @@
 static void start(const Arg* arg);
 static void mousemove(const Arg* arg);
 static void mouseresize(const Arg* arg);
+static void nextWorkspace(const Arg* arg);
+static void previousWorkspace(const Arg* arg);
+static void changeWorkspace(const Arg* arg);
+static void sendToWorkspace(const Arg* arg);
 
 #include "config.h"
+
+static void onWorkspaceChanged();
 
 #define BORDER_WIDTH_X2 (BORDER_WIDTH << 1)
 
@@ -28,6 +34,8 @@ xcb_window_t root;
 xcb_screen_t* screen;
 uint_least16_t previous_x;
 uint_least16_t previous_y;
+
+uint_least8_t currentWorkspace = 0;
 
 static window* focusedWindow;
 window* windows;
@@ -142,6 +150,9 @@ void handle_maprequest(xcb_map_request_event_t* event)
 	window->width = geometry->width;
 	window->height = geometry->height;
 
+	printf("Setting new window to workspace %d\n", currentWorkspace);
+	window->workspace = currentWorkspace;
+
 	if (windows != NULL)
 	{
 		window->next = windows;
@@ -199,7 +210,7 @@ void handle_buttonrelease(xcb_button_release_event_t* event)
 	resizing = false;
 }
 
-void mousemove(const Arg* arg)
+void mousemove(__attribute__((unused)) const Arg* arg)
 {
 	printf("mousemove\n");
 	moving = true;
@@ -212,7 +223,7 @@ void mousemove(const Arg* arg)
 	xcb_flush(c);
 }
 
-void mouseresize(const Arg* arg)
+void mouseresize(__attribute__((unused)) const Arg* arg)
 {
 	printf("mouseresize\n");
 	resizing = true;
@@ -336,6 +347,68 @@ void start(const Arg* arg)
 	}
 }
 
+/*
+ * Workspace
+ */
+
+void nextWorkspace(__attribute__((unused)) const Arg* arg)
+{
+	printf("nextWorkspace\n");
+
+	currentWorkspace = (currentWorkspace + 1) % 10;
+	onWorkspaceChanged();
+}
+
+void previousWorkspace(__attribute__((unused)) const Arg* arg)
+{
+	printf("previousWorkspace\n");
+
+	currentWorkspace = (currentWorkspace + 9) % 10;
+	onWorkspaceChanged();
+}
+
+void changeWorkspace(const Arg* arg)
+{
+	printf("changeWorkspace: arg=%d\n", arg->i);
+
+	currentWorkspace = arg->i;
+	onWorkspaceChanged();
+}
+
+void sendToWorkspace(__attribute__((unused)) const Arg* arg)
+{
+	printf("sendToWorkspace: arg=%d\n", arg->i);
+
+	if (focusedWindow != NULL)
+	{
+		focusedWindow->workspace = arg->i;
+		xcb_unmap_window(c, focusedWindow->id);
+		xcb_flush(c);
+		focusedWindow = NULL;
+	}
+}
+
+void onWorkspaceChanged()
+{
+	printf("onWorkspaceChanged: currentWorkspace=%d\n", currentWorkspace);
+	assert(currentWorkspace <= 9);
+
+	// We currently have no clients
+	if (windows == NULL)
+		return;
+
+	window* window = windows;
+
+	do {
+		if (window->workspace == currentWorkspace)
+			xcb_map_window(c, window->id);
+		else
+			xcb_unmap_window(c, window->id);
+	} while ((window = window->next) != NULL);
+
+	xcb_flush(c);
+}
+
 int main(void)
 {
 	/*
@@ -371,9 +444,6 @@ int main(void)
 	}
 
 	root = screen->root;
-
-	printf("White: %d\n", screen->white_pixel);
-	printf("Black: %d\n", screen->black_pixel);
 
 	xcb_flush(c);
 
