@@ -1,9 +1,16 @@
 #define MODKEY XCB_MOD_MASK_4
+#define SHIFT  XCB_MOD_MASK_SHIFT
 
 #define FOCUS_COLOR 0xFF0000
 #define UNFOCUS_COLOR 0x005577
 
 #define BORDER_WIDTH 1
+
+/*
+ * Number of workspaces
+ * They will be numbered from 0 to NB_WORKSPACES-1
+ */
+#define NB_WORKSPACES 10
 
 static const char* termcmd [] = { "alacritty",
 	                              NULL };
@@ -11,15 +18,17 @@ static const char* menucmd [] = { "dmenu_run",
 	                              NULL };
 
 #define WORKSPACEKEYS(KEY,WORKSPACE) \
-	{ MODKEY|XCB_MOD_MASK_SHIFT, KEY, sendToWorkspace, {.i = WORKSPACE} }, \
-	{ MODKEY,                    KEY, changeWorkspace, {.i = WORKSPACE} },
+	{ MODKEY|XCB_MOD_MASK_SHIFT, KEY, workspace_send, {.i = WORKSPACE} }, \
+	{ MODKEY,                    KEY, workspace_change, {.i = WORKSPACE} },
 
 static Key keys [] =
 {
-	{ MODKEY, XK_Return,    start,             { .cmd = termcmd }},
-	{ MODKEY, XK_p,         start,             { .cmd = menucmd }},
-	{ MODKEY, XK_Page_Up,   previousWorkspace, { 0 }},
-	{ MODKEY, XK_Page_Down, nextWorkspace,     { 0 }},
+	{ MODKEY,       XK_Return,    start,              { .cmd = termcmd }},
+	{ MODKEY,       XK_p,         start,              { .cmd = menucmd }},
+	{ MODKEY,       XK_Page_Up,   workspace_previous, { 0 }},
+	{ MODKEY,       XK_Page_Down, workspace_next,     { 0 }},
+	{ MODKEY|SHIFT, XK_Tab,       focus_next,         { .b = true }},
+	{ MODKEY,       XK_Tab,       focus_next,         { .b = false }},
 	WORKSPACEKEYS(XK_Home, 0)
 	WORKSPACEKEYS(XK_1,    0)
 	WORKSPACEKEYS(XK_2,    1)

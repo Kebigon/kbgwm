@@ -1,12 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <assert.h>
 
 #include <xcb/xcb.h>
 #include <X11/keysym.h>
-
+#include <inttypes.h>
 #include "xcbutils.h"
 
 #define IGNORE_LOCK(modifier) (modifier & ~(XCB_MOD_MASK_LOCK))
@@ -15,14 +15,27 @@
 static void start(const Arg* arg);
 static void mousemove(const Arg* arg);
 static void mouseresize(const Arg* arg);
-static void nextWorkspace(const Arg* arg);
-static void previousWorkspace(const Arg* arg);
-static void changeWorkspace(const Arg* arg);
-static void sendToWorkspace(const Arg* arg);
+
+static void client_add(client*);
+static void client_add_workspace(client*, uint_fast8_t);
+static client* client_find(xcb_window_t);
+static client* client_remove();
+static client* client_remove_workspace(uint_fast8_t);
+static void focus_apply(client*);
+static void focus_next(const Arg*);
+static void handle_button_press(xcb_button_press_event_t*);
+static void handle_button_release(xcb_button_release_event_t*);
+static void handle_key_press(xcb_key_press_event_t*);
+static void handle_map_request(xcb_map_request_event_t*);
+static void handle_mapping_notify(xcb_mapping_notify_event_t*);
+static void handle_motion_notify(xcb_motion_notify_event_t*);
+static void workspace_change(const Arg*);
+static void workspace_next(const Arg*);
+static void workspace_previous(const Arg*);
+static void workspace_send(const Arg*);
+static void workspace_set(uint_fast8_t);
 
 #include "config.h"
-
-static void onWorkspaceChanged();
 
 #define BORDER_WIDTH_X2 (BORDER_WIDTH << 1)
 
@@ -35,53 +48,9 @@ xcb_screen_t* screen;
 uint_least16_t previous_x;
 uint_least16_t previous_y;
 
-uint_least8_t currentWorkspace = 0;
-
-static window* focusedWindow;
-window* windows;
-
-window* findWindow(xcb_window_t id)
-{
-	window* window = windows;
-
-	do
-	{
-		if (window->id == id)
-			return (window);
-	}
-	while ((window = window->next) != NULL);
-
-	return NULL;
-}
-
-void focus(xcb_window_t id)
-{
-	printf("focus: id=%d\n", id);
-
-	uint32_t values[1];
-
-	window* window = findWindow(id);
-	assert(window != NULL);
-
-	// A window was previously focused -> we change its color
-	if (focusedWindow != NULL)
-	{
-		xcb_change_window_attributes(c, focusedWindow->id, XCB_CW_BORDER_PIXEL, (uint32_t[]) { 0xFF000000 | UNFOCUS_COLOR });
-	}
-
-	xcb_change_window_attributes(c, id, XCB_CW_BORDER_PIXEL, (uint32_t[]) { 0xFF000000 | FOCUS_COLOR });
-
-	// Raise the window so it is on top
-	values[0] = XCB_STACK_MODE_TOP_IF;
-	xcb_configure_window(c, id, XCB_CONFIG_WINDOW_STACK_MODE, values);
-
-	// Set the keyboard on the focused window
-	xcb_set_input_focus(c, XCB_NONE, id, XCB_CURRENT_TIME);
-	xcb_flush(c);
-
-	focusedWindow = window;
-	printf("focus set to: id=%d\n", focusedWindow->id);
-}
+#define focusedWindow workspaces[current_workspace]
+uint_fast8_t current_workspace = 0;
+static client* workspaces[NB_WORKSPACES];
 
 void setupEvents()
 {
@@ -105,109 +74,6 @@ void setupEvents()
 		xcb_register_button_events(buttons[i]);
 
 	xcb_flush(c);
-}
-
-void onMappingNotify(xcb_mapping_notify_event_t* event)
-{
-	printf("sequence %d\n", event->sequence);
-	printf("request %d\n", event->request);
-	printf("first_keycode %d\n", event->first_keycode);
-	printf("count %d\n", event->count);
-}
-
-void handle_keypress(xcb_key_press_event_t* event)
-{
-	xcb_keysym_t keysym = xcb_get_keysym(event->detail);
-
-	printf("received key: mod %d key %d\n", event->state, keysym);
-
-	for (uint_fast8_t i = 0; i < LENGTH(keys); i++)
-	{
-		printf("testing key: mod %d key %d\n", keys[i].modifiers,
-		       keys[i].keysym);
-
-		if (keysym == keys[i].keysym && MATCH_MODIFIERS(keys[i].modifiers, event->state))
-		{
-			printf("Key found !\n");
-			keys[i].func(&keys[i].arg);
-			break;
-		}
-	}
-}
-
-void handle_maprequest(xcb_map_request_event_t* event)
-{
-	xcb_get_geometry_reply_t* geometry;
-
-	printf("received map request: parent %d xcb_window_t %d\n", event->parent, event->window);
-
-	geometry = xcb_get_geometry_reply(c, xcb_get_geometry(c, event->window), NULL);
-
-	window* window = emalloc(sizeof window);
-	window->id = event->window;
-	window->x = geometry->x;
-	window->y = geometry->y;
-	window->width = geometry->width;
-	window->height = geometry->height;
-
-	printf("Setting new window to workspace %d\n", currentWorkspace);
-	window->workspace = currentWorkspace;
-
-	if (windows != NULL)
-	{
-		window->next = windows;
-	}
-
-	windows = window;
-
-	printf("new window: id=%d x=%d y=%d width=%d height=%d\n", window->id, window->x, window->y, window->width, window->height);
-
-	focus(event->window);
-
-	xcb_configure_window(c, window->id, XCB_CONFIG_WINDOW_BORDER_WIDTH, (uint32_t[]) { BORDER_WIDTH });
-
-	// Display the window
-	xcb_map_window(c, window->id);
-	xcb_flush(c);
-}
-
-void handle_buttonpress(xcb_button_press_event_t* event)
-{
-	printf("handle_buttonpress: child=%d\n", event->child);
-
-	// Click on the root window -> ignore
-	if (event->child == 0)
-		return;
-
-	// Focus window if needed
-	if (event->child != focusedWindow->id)
-		focus(event->child);
-
-	for (uint_fast8_t i = 0; i < LENGTH(buttons); i++)
-	{
-		if (event->detail == buttons[i].keysym && MATCH_MODIFIERS(buttons[i].modifiers,event->state))
-		{
-			previous_x = event->root_x;
-			previous_y = event->root_y;
-
-			printf("Button found !\n");
-			buttons[i].func(&buttons[i].arg);
-			break;
-		}
-	}
-}
-
-void handle_buttonrelease(xcb_button_release_event_t* event)
-{
-	assert(moving || resizing);
-
-	printf("handle_buttonrelease: mod=%d button=%d\n", event->state, event->detail);
-
-	xcb_ungrab_pointer(c, XCB_CURRENT_TIME);
-	xcb_flush(c);
-
-	moving = false;
-	resizing = false;
 }
 
 void mousemove(__attribute__((unused)) const Arg* arg)
@@ -236,7 +102,285 @@ void mouseresize(__attribute__((unused)) const Arg* arg)
 	xcb_flush(c);
 }
 
-void handle_motionnotify(xcb_motion_notify_event_t* event)
+void eventLoop()
+{
+	while (!quit)
+	{
+		xcb_generic_event_t* event = xcb_wait_for_event(c);
+		printf("event: received\n");
+
+		switch (event->response_type & ~0x80)
+		{
+			case XCB_BUTTON_PRESS:
+				handle_button_press((xcb_button_press_event_t*) event);
+				break;
+
+			case XCB_BUTTON_RELEASE:
+				handle_button_release((xcb_button_release_event_t*) event);
+				break;
+
+			case XCB_KEY_PRESS:
+				handle_key_press((xcb_key_press_event_t*) event);
+				break;
+
+			case XCB_MAP_REQUEST:
+				handle_map_request((xcb_map_request_event_t*) event);
+				break;
+
+			case XCB_MAPPING_NOTIFY:
+				handle_mapping_notify((xcb_mapping_notify_event_t*) event);
+				break;
+
+			case XCB_MOTION_NOTIFY:
+				handle_motion_notify((xcb_motion_notify_event_t*) event);
+				break;
+
+			default:
+				printf("Received event, response type %d\n",
+				       event->response_type & ~0x80);
+				break;
+		}
+
+		printf("event: handled\n");
+		free(event);
+		printf("event: freed\n");
+		printf("\n");
+	}
+}
+
+void start(const Arg* arg)
+{
+	printf("start %s\n", arg->cmd[0]);
+
+	if (fork() == 0)
+	{
+		// Child process
+		setsid();
+
+		if (execvp((char*) arg->cmd[0], (char**) arg->cmd) == -1)
+		{
+			perror(arg->cmd[0]);
+			exit(-1);
+		}
+	}
+}
+
+/*
+ * Clients
+ */
+
+// Add a client to the current workspace list
+void client_add(client* client)
+{
+	client_add_workspace(client, current_workspace);
+}
+
+// Add a client to a workspace list
+void client_add_workspace(client* client, uint_fast8_t workspace)
+{
+	assert(client != NULL);
+	assert(workspace < NB_WORKSPACES);
+
+	if (workspaces[workspace] == NULL)
+	{
+		client->next = client;
+		client->previous = client;
+	}
+	else {
+		client->next = workspaces[workspace];
+		client->previous = workspaces[workspace]->previous;
+		client->next->previous = client;
+		client->previous->next = client;
+	}
+
+	workspaces[workspace] = client;
+}
+
+// Find a client in the current workspace list
+client* client_find(xcb_window_t id)
+{
+	client* client = workspaces[current_workspace];
+
+	if (client != NULL)
+		do
+		{
+			if (client->id == id)
+				return client;
+		}
+		while ((client = client->next) != workspaces[current_workspace]);
+
+	return NULL;
+}
+
+// Remove the focused client from the current workspace list
+client* client_remove()
+{
+	return client_remove_workspace(current_workspace);
+}
+
+// Remove the focused client from a workspace list
+client* client_remove_workspace(uint_fast8_t workspace)
+{
+	assert(workspace < NB_WORKSPACES);
+	assert(workspaces[workspace] != NULL);
+
+	client* client = workspaces[workspace];
+	if (client->next == client)
+		workspaces[workspace] = NULL;
+	else {
+		client->previous->next = client->next;
+		client->next->previous = client->previous;
+		workspaces[workspace] = client->next;
+	}
+
+	return client;
+}
+
+/*
+ * Focus
+ */
+
+void focus_apply(client* new_focus)
+{
+	assert(workspaces[current_workspace] != NULL);
+	assert(new_focus != NULL);
+
+	printf("focus_apply: old=%d new=%d\n", workspaces[current_workspace]->id, new_focus->id);
+
+	uint32_t values[1];
+
+	// We change the color of the previously focused client
+	xcb_change_window_attributes(c, workspaces[current_workspace]->id, XCB_CW_BORDER_PIXEL, (uint32_t[]) { 0xFF000000 | UNFOCUS_COLOR });
+
+	// We change the color of the focused client
+	xcb_change_window_attributes(c, new_focus->id, XCB_CW_BORDER_PIXEL, (uint32_t[]) { 0xFF000000 | FOCUS_COLOR });
+
+	// Raise the window so it is on top
+	values[0] = XCB_STACK_MODE_TOP_IF;
+	xcb_configure_window(c, new_focus->id, XCB_CONFIG_WINDOW_STACK_MODE, values);
+
+	// Set the keyboard on the focused window
+	xcb_set_input_focus(c, XCB_NONE, new_focus->id, XCB_CURRENT_TIME);
+	xcb_flush(c);
+
+	printf("focus_apply: done\n");
+}
+
+// Focus the next client in the current workspace list
+// arg->b : reverse mode
+void focus_next(const Arg* arg)
+{
+	// No clients in the current workspace list
+	// Only one client in the current workspace list
+	if (workspaces[current_workspace] == NULL || workspaces[current_workspace]->next == workspaces[current_workspace])
+		return; // Nothing to be done
+
+	client* new_focus = arg->b ? workspaces[current_workspace]->previous : workspaces[current_workspace]->next;
+
+	focus_apply(new_focus);
+
+	// Move the newly focused window to the front of the list
+	workspaces[current_workspace] = new_focus;
+}
+
+/*
+ * Handling events from the event loop
+ */
+
+void handle_button_press(xcb_button_press_event_t* event)
+{
+	printf("handle_button_press: client=%d modifier=%d button=%d\n", event->child, event->state, event->detail);
+
+	// Click on the root window
+	if (event->child == 0)
+		return; // Nothing to be done
+
+	// The window clicked is not the one in focus, we have to focus it
+	if (focusedWindow == NULL || event->child != focusedWindow->id)
+		focus_apply(client_find(event->child));
+
+	for (uint_fast8_t i = 0; i < LENGTH(buttons); i++)
+	{
+		if (event->detail == buttons[i].keysym && MATCH_MODIFIERS(buttons[i].modifiers,event->state))
+		{
+			previous_x = event->root_x;
+			previous_y = event->root_y;
+
+			buttons[i].func(&buttons[i].arg);
+			break;
+		}
+	}
+
+	printf("handle_button_press: done\n");
+}
+
+void handle_button_release(__attribute__((unused)) xcb_button_release_event_t* event)
+{
+	printf("XCB_BUTTON_RELEASE\n");
+
+	assert(moving || resizing);
+
+	xcb_ungrab_pointer(c, XCB_CURRENT_TIME);
+	xcb_flush(c);
+
+	moving = false;
+	resizing = false;
+}
+
+void handle_key_press(xcb_key_press_event_t* event)
+{
+	printf("XCB_KEY_PRESS: detail=%d state=%d\n", event->detail, event->state);
+	xcb_keysym_t keysym = xcb_get_keysym(event->detail);
+
+	for (uint_fast8_t i = 0; i < LENGTH(keys); i++)
+	{
+		if (keysym == keys[i].keysym && MATCH_MODIFIERS(keys[i].modifiers, event->state))
+		{
+			keys[i].func(&keys[i].arg);
+			break;
+		}
+	}
+}
+
+void handle_map_request(xcb_map_request_event_t* event)
+{
+	printf("handle_map_request: parent %d xcb_window_t %d\n", event->parent, event->window);
+
+	xcb_get_geometry_reply_t* geometry = xcb_get_geometry_reply(c, xcb_get_geometry_unchecked(c, event->window), NULL);
+
+	client* new_client = emalloc(sizeof(client));
+
+	new_client->id = event->window;
+	new_client->x = geometry->x;
+	new_client->y = geometry->y;
+	new_client->width = geometry->width;
+	new_client->height = geometry->height;
+
+	focus_apply(new_client);
+	client_add(new_client);
+
+	printf("new window: id=%d x=%d y=%d width=%d height=%d\n", new_client->id, new_client->x, new_client->y, new_client->width, new_client->height);
+
+	xcb_configure_window(c, new_client->id, XCB_CONFIG_WINDOW_BORDER_WIDTH, (uint32_t[]) { BORDER_WIDTH });
+
+	// Display the client
+	xcb_map_window(c, new_client->id);
+	xcb_flush(c);
+
+	free(geometry);
+
+	printf("handle_map_request: done\n");
+}
+
+void handle_mapping_notify(xcb_mapping_notify_event_t* event)
+{
+	printf("sequence %d\n", event->sequence);
+	printf("request %d\n", event->request);
+	printf("first_keycode %d\n", event->first_keycode);
+	printf("count %d\n", event->count);
+}
+
+void handle_motion_notify(xcb_motion_notify_event_t* event)
 {
 	assert(moving || resizing);
 	assert(focusedWindow != NULL);
@@ -280,134 +424,79 @@ void handle_motionnotify(xcb_motion_notify_event_t* event)
 	xcb_flush(c);
 }
 
-void eventLoop()
+/*
+ * Workspaces
+ */
+
+void workspace_change(const Arg* arg)
 {
-	xcb_generic_event_t* event;
-
-	while (!quit)
-	{
-		event = xcb_wait_for_event(c);
-
-		switch (event->response_type & ~0x80)
-		{
-			case XCB_KEY_PRESS:
-				printf("\nXCB_KEY_PRESS\n");
-				handle_keypress((xcb_key_press_event_t*) event);
-				break;
-
-			case XCB_BUTTON_PRESS:
-				printf("\nXCB_BUTTON_PRESS\n");
-				handle_buttonpress((xcb_button_press_event_t*) event);
-				break;
-
-			case XCB_BUTTON_RELEASE:
-				printf("\nXCB_BUTTON_RELEASE\n");
-				handle_buttonrelease((xcb_button_release_event_t*) event);
-				break;
-
-			case XCB_MAP_REQUEST:
-				printf("\nXCB_MAP_REQUEST\n");
-				handle_maprequest((xcb_map_request_event_t*) event);
-				break;
-
-			case XCB_MAPPING_NOTIFY:
-				printf("\nXCB_MAPPING_NOTIFY\n");
-				onMappingNotify((xcb_mapping_notify_event_t*) event);
-				break;
-
-			case XCB_MOTION_NOTIFY:
-				printf("\nXCB_MOTION_NOTIFY\n");
-				handle_motionnotify((xcb_motion_notify_event_t*) event);
-				break;
-
-			default:
-				printf("Received event, response type %d\n",
-				       event->response_type & ~0x80);
-				break;
-		}
-
-		free(event);
-	}
+	printf("workspace_change: i=%d\n", arg->i);
+	workspace_set(arg->i);
+	printf("workspace_change: done\n");
 }
 
-void start(const Arg* arg)
+void workspace_next(__attribute__((unused)) const Arg* arg)
 {
-	printf("start %s\n", arg->cmd[0]);
+	printf("workspace_next\n");
+	workspace_set(current_workspace + 1 == NB_WORKSPACES ? 0 : current_workspace + 1 );
+	printf("workspace_next: done\n");
+}
 
-	if (fork() == 0)
-	{
-		// Child process
-		setsid();
+void workspace_previous(__attribute__((unused)) const Arg* arg)
+{
+	printf("workspace_previous\n");
+	workspace_set(current_workspace == 0 ? NB_WORKSPACES - 1 : current_workspace - 1);
+	printf("workspace_previous: done\n");
+}
 
-		if (execvp((char*) arg->cmd[0], (char**) arg->cmd) == -1)
-		{
-			perror(arg->cmd[0]);
-			exit(-1);
+void workspace_send(const Arg* arg)
+{
+	printf("workspace_send: i=%d\n", arg->i);
+	uint_fast8_t new_workspace = arg->i;
+
+	if (current_workspace == new_workspace || workspaces[current_workspace] == NULL)
+		return; // Nothing to be done
+
+	client* client = client_remove();
+	client_add_workspace(client, new_workspace);
+
+	xcb_unmap_window(c, client->id);
+	xcb_flush(c);
+	printf("workspace_send: done\n");
+}
+
+void workspace_set(uint_fast8_t new_workspace)
+{
+	printf("workspace_set: old=%d new=%d\n", current_workspace, new_workspace);
+
+	if (current_workspace == new_workspace)
+		return; // Nothing to be done
+
+	// Unmap the clients of the current workspace (if any)
+	client* client = workspaces[current_workspace];
+	if (client != NULL)
+		do {
+			xcb_unmap_window(c, client->id);
 		}
-	}
+		while ((client = client->next) != workspaces[current_workspace]);
+
+	// Map the clients of the new workspace (if any)
+	client = workspaces[new_workspace];
+	if (client != NULL)
+		do {
+			xcb_map_window(c, client->id);
+		}
+		while ((client = client->next) != workspaces[new_workspace]);
+
+	xcb_flush(c);
+	current_workspace = new_workspace;
+
+	printf("workspace_set: done\n");
 }
 
 /*
- * Workspace
+ * Main
  */
-
-void nextWorkspace(__attribute__((unused)) const Arg* arg)
-{
-	printf("nextWorkspace\n");
-
-	currentWorkspace = (currentWorkspace + 1) % 10;
-	onWorkspaceChanged();
-}
-
-void previousWorkspace(__attribute__((unused)) const Arg* arg)
-{
-	printf("previousWorkspace\n");
-
-	currentWorkspace = (currentWorkspace + 9) % 10;
-	onWorkspaceChanged();
-}
-
-void changeWorkspace(const Arg* arg)
-{
-	printf("changeWorkspace: arg=%d\n", arg->i);
-
-	currentWorkspace = arg->i;
-	onWorkspaceChanged();
-}
-
-void sendToWorkspace(__attribute__((unused)) const Arg* arg)
-{
-	printf("sendToWorkspace: arg=%d\n", arg->i);
-
-	if (focusedWindow != NULL)
-	{
-		focusedWindow->workspace = arg->i;
-		xcb_unmap_window(c, focusedWindow->id);
-		xcb_flush(c);
-		focusedWindow = NULL;
-	}
-}
-
-void onWorkspaceChanged()
-{
-	printf("onWorkspaceChanged: currentWorkspace=%d\n", currentWorkspace);
-	assert(currentWorkspace <= 9);
-
-	// We currently have no clients
-	if (windows == NULL)
-		return;
-
-	window* window = windows;
-
-	do {
-		if (window->workspace == currentWorkspace)
-			xcb_map_window(c, window->id);
-		else
-			xcb_unmap_window(c, window->id);
-	} while ((window = window->next) != NULL);
-
-	xcb_flush(c);
-}
 
 int main(void)
 {
@@ -446,6 +535,13 @@ int main(void)
 	root = screen->root;
 
 	xcb_flush(c);
+
+	/*
+	 * Initialize variables
+	 */
+
+	for (uint_fast8_t i = 0; i != NB_WORKSPACES; i++)
+		workspaces[i] = NULL;
 
 	setupEvents();
 

@@ -6,25 +6,19 @@
 extern xcb_connection_t* c;
 extern xcb_window_t root;
 
-void* emalloc
-(
-	size_t size
-)
+void* emalloc(size_t size)
 {
 	void* p;
 
-	if ( !(p = malloc (
-			   size ))
-	     )
+	printf("client size=%zd\n", size);
+
+	if (!(p = malloc( size )))
 	{
-		printf (
-			"Out of memory" );
-		exit (
-			-1 );
+		printf ("Out of memory" );
+		exit(-1);
 	}
 
-	return
-	    (p);
+	return p;
 }
 
 /*
