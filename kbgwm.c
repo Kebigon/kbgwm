@@ -101,7 +101,7 @@ inline void debug_print_globals()
 	}
 }
 
-void mousemove(__attribute__((unused))                                                                                                                const Arg* arg)
+void mousemove(__attribute__((unused))const Arg* arg)
 {
 	printf("mousemove\n");
 	moving = true;
@@ -113,7 +113,7 @@ void mousemove(__attribute__((unused))                                          
 	xcb_flush(c);
 }
 
-void mouseresize(__attribute__((unused))                                                                                                                const Arg* arg)
+void mouseresize(__attribute__((unused))const Arg* arg)
 {
 	printf("mouseresize\n");
 	resizing = true;
@@ -605,14 +605,14 @@ void workspace_change(const Arg* arg)
 	printf("workspace_change: done\n");
 }
 
-void workspace_next(__attribute__((unused))                                                                                                                const Arg* arg)
+void workspace_next(__attribute__((unused))const Arg* arg)
 {
 	printf("workspace_next\n");
 	workspace_set(current_workspace + 1 == NB_WORKSPACES ? 0 : current_workspace + 1);
 	printf("workspace_next: done\n");
 }
 
-void workspace_previous(__attribute__((unused))                                                                                                                const Arg* arg)
+void workspace_previous(__attribute__((unused))const Arg* arg)
 {
 	printf("workspace_previous\n");
 	workspace_set(current_workspace == 0 ? NB_WORKSPACES - 1 : current_workspace - 1);
@@ -674,12 +674,11 @@ int main(void)
 	 * displayname = NULL -> use DISPLAY environment variable
 	 */
 	int screenp;
-	c = xcb_connect(
-		NULL, &screenp);
+	c = xcb_connect(NULL, &screenp);
 
 	if (xcb_connection_has_error(c))
 	{
-		perror("xcb_connect");
+		printf("xcb_connect failed: %d", xcb_connection_has_error(c));
 		exit(1);
 	}
 

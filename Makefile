@@ -3,7 +3,7 @@ OBJ = kbgwm.o xcbutils.o
 CFLAGS+=-g -std=c99 -Wall -Wextra -I/usr/local/include
 LDFLAGS+=-L/usr/local/lib -lxcb -lxcb-icccm -lxcb-keysyms
 
-all: clean format kbgwm
+all: clean kbgwm
 
 kbgwm: ${OBJ}
 	${CC} ${CFLAGS} ${OBJ} ${LDFLAGS} -o $@
