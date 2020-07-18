@@ -8,39 +8,32 @@ typedef union
 	const bool b;
 	const uint_least8_t i;
 	const char** cmd;
-}
-Arg;
+} Arg;
 
 typedef struct
 {
 	uint16_t modifiers;
 	xcb_keysym_t keysym;
-	void (*func)
-	(
-		const Arg*
-	);
+	void (* func)(const Arg*);
 	const Arg arg;
-}
-Key;
+} Key;
 
 typedef struct
 {
 	uint16_t modifiers;
 	xcb_button_t keysym;
-	void (*func)
-	(
-		const Arg*
-	);
+	void (* func)(const Arg*);
 	const Arg arg;
-}
-Button;
+} Button;
 
-typedef struct clientstruct client;
-struct clientstruct
+typedef struct client_t client;
+struct client_t
 {
 	xcb_window_t id;
-	int_least16_t x, y;
-	uint_least16_t width, height;
+	int16_t x, y;
+	uint16_t width, height;
+	int32_t min_width, min_height;
+	int32_t max_width, max_height;
 	client* previous;
 	client* next;
 };
