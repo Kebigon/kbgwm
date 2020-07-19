@@ -10,8 +10,7 @@
 #include <inttypes.h>
 #include "xcbutils.h"
 
-#define IGNORE_LOCK(modifier) (modifier & ~(XCB_MOD_MASK_LOCK))
-#define MATCH_MODIFIERS(expected, actual) ((actual & expected) == expected)
+#define CLEANMASK(mask) (mask & ~(numlockmask|XCB_MOD_MASK_LOCK))
 
 static void start(const Arg* arg);
 static void mousemove(const Arg* arg);
@@ -59,6 +58,7 @@ xcb_window_t root;
 xcb_screen_t* screen;
 uint_least16_t previous_x;
 uint_least16_t previous_y;
+uint16_t numlockmask = 0;
 
 #define focused_client workspaces[current_workspace]
 uint_fast8_t current_workspace = 0;
@@ -437,7 +437,7 @@ void handle_button_press(xcb_button_press_event_t* event)
 
 	for (uint_fast8_t i = 0; i < LENGTH(buttons); i++)
 	{
-		if (event->detail == buttons[i].keysym && MATCH_MODIFIERS(buttons[i].modifiers, event->state))
+		if (event->detail == buttons[i].keysym && CLEANMASK(buttons[i].modifiers) == CLEANMASK(event->state))
 		{
 			previous_x = event->root_x;
 			previous_y = event->root_y;
@@ -478,7 +478,7 @@ void handle_key_press(xcb_key_press_event_t* event)
 
 	for (uint_fast8_t i = 0; i < LENGTH(keys); i++)
 	{
-		if (keysym == keys[i].keysym && MATCH_MODIFIERS(keys[i].modifiers, event->state))
+		if (keysym == keys[i].keysym && CLEANMASK(keys[i].modifiers) == CLEANMASK(event->state))
 		{
 			keys[i].func(&keys[i].arg);
 			break;
@@ -552,6 +552,43 @@ void handle_unmap_notify(xcb_unmap_notify_event_t* event)
 /*
  * Setup
  */
+
+// Retrieve the numlock keycode
+void setup_keyboard()
+{
+	xcb_get_modifier_mapping_reply_t* reply = xcb_get_modifier_mapping_reply(c, xcb_get_modifier_mapping_unchecked(c), NULL);
+	if (!reply)
+	{
+		printf("Unable to retrieve midifier mapping");
+		exit(-1);
+	}
+
+	xcb_keycode_t* modmap = xcb_get_modifier_mapping_keycodes(reply);
+	if (!modmap)
+	{
+		printf("Unable to retrieve midifier mapping keycodes");
+		exit(-1);
+	}
+
+	xcb_keycode_t* numlock = xcb_get_keycodes(XK_Num_Lock);
+
+	// Not sure why 8, I looked at both dwm and 2bwm, and they both do the same
+	for (uint_fast8_t i = 0; i < 8; i++)
+	{
+		for (uint_fast8_t j = 0; j < reply->keycodes_per_modifier; j++)
+		{
+			xcb_keycode_t keycode = modmap[i * reply->keycodes_per_modifier + j];
+
+			if (keycode == *numlock)
+			{
+				numlockmask = (1 << i);
+				printf("numlock is %d", keycode);
+			}
+		}
+	}
+
+	free(reply);
+}
 
 void setup_events()
 {
@@ -712,6 +749,7 @@ int main(void)
 	for (uint_fast8_t i = 0; i != NB_WORKSPACES; i++)
 		workspaces[i] = NULL;
 
+	setup_keyboard();
 	setup_screen();
 	setup_events();
 
