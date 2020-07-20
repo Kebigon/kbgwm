@@ -36,6 +36,7 @@ static void handle_map_request(xcb_map_request_event_t*);
 static void handle_mapping_notify(xcb_mapping_notify_event_t*);
 static void handle_motion_notify(xcb_motion_notify_event_t*);
 static void handle_unmap_notify(xcb_unmap_notify_event_t*);
+static void quit(const Arg*);
 static void workspace_change(const Arg*);
 static void workspace_next(const Arg*);
 static void workspace_previous(const Arg*);
@@ -50,7 +51,7 @@ static inline void debug_print_globals();
 
 #define BORDER_WIDTH_X2 (BORDER_WIDTH << 1)
 
-bool quit = false;
+bool running = true;
 bool moving = false;
 bool resizing = false;
 xcb_connection_t* c;
@@ -127,7 +128,7 @@ void mouseresize(__attribute__((unused))const Arg* arg)
 
 void eventLoop()
 {
-	while (!quit)
+	while (running)
 	{
 		xcb_generic_event_t* event = xcb_wait_for_event(c);
 
@@ -546,6 +547,11 @@ void handle_unmap_notify(xcb_unmap_notify_event_t* event)
 	printf("XCB_UNMAP_NOTIFY: window=%d\n", event->window);
 }
 
+void quit(__attribute__((unused))const Arg* arg)
+{
+	running = false;
+}
+
 /*
  * Setup
  */
@@ -752,6 +758,15 @@ int main(void)
 
 	// Event loop
 	eventLoop();
+
+	for (uint_fast8_t i = 0; i != NB_WORKSPACES; i++)
+	{
+		while (workspaces[i] != NULL)
+		{
+			client* client = client_remove_workspace(i);
+			free(client);
+		}
+	}
 
 	xcb_disconnect(c);
 

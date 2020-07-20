@@ -27,6 +27,7 @@ static Key keys[] =
 	{ MODKEY,         XK_Page_Down, workspace_next,     { 0 } },
 	{ MODKEY | SHIFT, XK_Tab,       focus_next,         { .b = true } },
 	{ MODKEY,         XK_Tab,       focus_next,         { .b = false } },
+	{ MODKEY | SHIFT, XK_q,         quit,               { 0 } },
 	WORKSPACEKEYS(XK_Home, 0)
 	WORKSPACEKEYS(XK_1, 0)
 	WORKSPACEKEYS(XK_2, 1)
