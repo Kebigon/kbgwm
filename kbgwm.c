@@ -544,9 +544,6 @@ void handle_motion_notify(xcb_motion_notify_event_t* event)
 void handle_unmap_notify(xcb_unmap_notify_event_t* event)
 {
 	printf("XCB_UNMAP_NOTIFY: window=%d\n", event->window);
-	client_remove_all_workspaces(event->window);
-	if (focused_client != NULL)
-		focus_apply();
 }
 
 /*
