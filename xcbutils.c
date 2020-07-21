@@ -1,7 +1,11 @@
 #include "xcbutils.h"
 
-#include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <xcb/xcb_icccm.h>
+#include <xcb/xproto.h>
 
 extern xcb_connection_t* c;
 extern xcb_window_t root;
@@ -92,4 +96,61 @@ xcb_keysym_t xcb_get_keysym(xcb_keycode_t keycode)
 
 	xcb_key_symbols_free(keysyms);
 	return (keysym);
+}
+
+#define ONLY_IF_EXISTS 0
+
+/* Get a defined atom from the X server. */
+xcb_atom_t xcb_get_atom(const char* atom_name)
+{
+	xcb_intern_atom_cookie_t cookie = xcb_intern_atom(c, ONLY_IF_EXISTS, strlen(atom_name), atom_name);
+
+	xcb_intern_atom_reply_t* reply = xcb_intern_atom_reply(c, cookie, NULL);
+
+	/* XXX Note that we return 0 as an atom if anything goes wrong.
+	 * Might become interesting.*/
+
+	if (reply == NULL)
+		return 0;
+
+	xcb_atom_t atom = reply->atom;
+	free(reply);
+	return atom;
+}
+
+bool xcb_send_atom(client* client, xcb_atom_t atom)
+{
+	assert(client != NULL);
+
+	bool supported = false;
+	xcb_get_property_cookie_t cookie = xcb_icccm_get_wm_protocols_unchecked(c, client->id, wm_protocols);
+
+	// Get the supported atoms for this client
+	xcb_icccm_get_wm_protocols_reply_t protocols;
+	if (xcb_icccm_get_wm_protocols_reply(c, cookie, &protocols, NULL) == 1)
+	{
+		for (uint_fast32_t i = 0; i < protocols.atoms_len; i++)
+		{
+			if (protocols.atoms[i] == atom)
+			{
+				supported = true;
+				break;
+			}
+		}
+	}
+
+	// The client does not support WM_DELETE, let's kill it
+	if (!supported)
+		return false;
+
+	xcb_client_message_event_t ev;
+	ev.response_type = XCB_CLIENT_MESSAGE;
+	ev.format = 32;
+	ev.sequence = 0;
+	ev.window = client->id;
+	ev.type = wm_protocols;
+	ev.data.data32[0] = atom;
+	ev.data.data32[1] = XCB_CURRENT_TIME;
+	xcb_send_event(c, false, client->id, XCB_EVENT_MASK_NO_EVENT, (char*) &ev);
+	return true;
 }

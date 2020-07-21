@@ -22,6 +22,7 @@ static client* client_find(xcb_window_t);
 static client* client_find_workspace(xcb_window_t, uint_fast8_t);
 static client* client_remove();
 static client* client_remove_workspace(uint_fast8_t);
+static void client_kill(const Arg*);
 static void client_create(xcb_window_t);
 static void client_sanitize_position(client*);
 static void client_sanitize_dimensions(client*);
@@ -359,6 +360,21 @@ void client_sanitize_dimensions(client* client)
 	height = uint16_in_range(height, 0, screen->height_in_pixels - client->y - BORDER_WIDTH_X2);
 	if (client->height != height)
 		client->height = height;
+}
+
+void client_kill(__attribute__((unused))const Arg* arg)
+{
+	// No client are focused
+	if (workspaces[current_workspace] == NULL)
+		return; // Nothing to be done
+
+	if (!xcb_send_atom(workspaces[current_workspace], wm_delete_window))
+	{
+		// The client does not support WM_DELETE, let's kill it
+		xcb_kill_client(c, workspaces[current_workspace]->id);
+	}
+
+	xcb_flush(c);
 }
 
 /*
@@ -751,6 +767,9 @@ int main(void)
 
 	for (uint_fast8_t i = 0; i != NB_WORKSPACES; i++)
 		workspaces[i] = NULL;
+
+	wm_protocols = xcb_get_atom(WM_PROTOCOLS);
+	wm_delete_window = xcb_get_atom(WM_DELETE_WINDOW);
 
 	setup_keyboard();
 	setup_screen();
