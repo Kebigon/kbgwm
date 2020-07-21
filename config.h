@@ -21,14 +21,15 @@ static const char* menucmd[] = { "dmenu_run", NULL };
 
 static Key keys[] =
 {
-	{ MODKEY,         XK_Return,    start,              { .cmd = termcmd } },
-	{ MODKEY,         XK_p,         start,              { .cmd = menucmd } },
-	{ MODKEY,         XK_Page_Up,   workspace_previous, { 0 } },
-	{ MODKEY,         XK_Page_Down, workspace_next,     { 0 } },
-	{ MODKEY | SHIFT, XK_Tab,       focus_next,         { .b = true } },
-	{ MODKEY,         XK_Tab,       focus_next,         { .b = false } },
-	{ MODKEY,         XK_q,         client_kill,        { 0 } },
-	{ MODKEY | SHIFT, XK_q,         quit,               { 0 } },
+	{ MODKEY,         XK_Return,    start,                  { .cmd = termcmd } },
+	{ MODKEY,         XK_p,         start,                  { .cmd = menucmd } },
+	{ MODKEY,         XK_Page_Up,   workspace_previous,     { 0 } },
+	{ MODKEY,         XK_Page_Down, workspace_next,         { 0 } },
+	{ MODKEY | SHIFT, XK_Tab,       focus_next,             { .b = true } },
+	{ MODKEY,         XK_Tab,       focus_next,             { .b = false } },
+	{ MODKEY,         XK_q,         client_kill,            { 0 } },
+	{ MODKEY | SHIFT, XK_q,         quit,                   { 0 } },
+	{ MODKEY,         XK_x,         client_toggle_maximize, { 0 } },
 	WORKSPACEKEYS(XK_Home, 0)
 	WORKSPACEKEYS(XK_1, 0)
 	WORKSPACEKEYS(XK_2, 1)

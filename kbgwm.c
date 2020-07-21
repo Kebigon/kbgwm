@@ -26,6 +26,9 @@ static void client_kill(const Arg*);
 static void client_create(xcb_window_t);
 static void client_sanitize_position(client*);
 static void client_sanitize_dimensions(client*);
+static void client_toggle_maximize(const Arg*);
+static void client_maximize(client*);
+static void client_unmaximize(client*);
 static void focus_apply();
 static void focus_next(const Arg*);
 static void focus_unfocus();
@@ -250,6 +253,7 @@ void client_create(xcb_window_t id)
 	new_client->min_height = hints.flags & XCB_ICCCM_SIZE_HINT_P_MIN_SIZE ? hints.min_height : 0;
 	new_client->max_width = hints.flags & XCB_ICCCM_SIZE_HINT_P_MAX_SIZE ? hints.max_width : 0xFFFF;
 	new_client->max_height = hints.flags & XCB_ICCCM_SIZE_HINT_P_MAX_SIZE ? hints.max_height : 0xFFFF;
+	new_client->maximized = false;
 
 	client_sanitize_dimensions(new_client);
 
@@ -377,6 +381,44 @@ void client_kill(__attribute__((unused))const Arg* arg)
 	}
 
 	xcb_flush(c);
+}
+
+void client_toggle_maximize(__attribute__((unused))const Arg* arg)
+{
+	// No client are focused
+	if (workspaces[current_workspace] == NULL)
+		return; // Nothing to be done
+
+	client* client = workspaces[current_workspace];
+
+	if (client->maximized)
+		client_unmaximize(client);
+	else
+		client_maximize(client);
+
+	xcb_flush(c);
+}
+
+void client_maximize(client* client)
+{
+	assert(client != NULL);
+	assert(!client->maximized);
+
+	client->maximized = true;
+
+	uint32_t values[] = { 0, 0, screen->width_in_pixels - BORDER_WIDTH_X2, screen->height_in_pixels - BORDER_WIDTH_X2 };
+	xcb_configure_window(c, focused_client->id, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, values);
+}
+
+void client_unmaximize(client* client)
+{
+	assert(client != NULL);
+	assert(client->maximized);
+
+	client->maximized = false;
+
+	uint32_t values[] = { client->x, client->y, client->width, client->height };
+	xcb_configure_window(c, focused_client->id, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, values);
 }
 
 /*
@@ -524,12 +566,17 @@ void handle_mapping_notify(xcb_mapping_notify_event_t* event)
 
 void handle_motion_notify(xcb_motion_notify_event_t* event)
 {
+	client* client = workspaces[current_workspace];
+
 	assert(moving || resizing);
-	assert(focused_client != NULL);
-	assert(focused_client->id != root);
+	assert(client != NULL);
+	assert(client->id != root);
 
 	printf("handle_motionnotify: root_x=%d root_y=%d event_x=%d event_y=%d\n", event->root_x, event->root_y, event->event_x,
 	       event->event_y);
+
+	if (client->maximized)
+		client_unmaximize(client);
 
 	int16_t diff_x = event->root_x - previous_x;
 	int16_t diff_y = event->root_y - previous_y;
@@ -538,23 +585,21 @@ void handle_motion_notify(xcb_motion_notify_event_t* event)
 
 	if (moving)
 	{
-		focused_client->x += diff_x;
-		focused_client->y += diff_y;
-		client_sanitize_position(focused_client);
+		client->x += diff_x;
+		client->y += diff_y;
+		client_sanitize_position(client);
 
-		uint32_t values[2] =
-		{   focused_client->x, focused_client->y};
-		xcb_configure_window(c, focused_client->id, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, values);
+		uint32_t values[2] = { client->x, client->y };
+		xcb_configure_window(c, client->id, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, values);
 	}
 	else if (resizing)
 	{
-		focused_client->width += diff_x;
-		focused_client->height += diff_y;
-		client_sanitize_dimensions(focused_client);
+		client->width += diff_x;
+		client->height += diff_y;
+		client_sanitize_dimensions(client);
 
-		uint32_t values[2] =
-		{   focused_client->width, focused_client->height};
-		xcb_configure_window(c, focused_client->id, XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, values);
+		uint32_t values[2] = { client->width, client->height };
+		xcb_configure_window(c, client->id, XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, values);
 	}
 
 	xcb_flush(c);

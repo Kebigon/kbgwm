@@ -34,6 +34,7 @@ struct client_t
 	uint16_t width, height;
 	int32_t min_width, min_height;
 	int32_t max_width, max_height;
+	bool maximized;
 	client* previous;
 	client* next;
 };
