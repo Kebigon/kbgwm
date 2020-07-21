@@ -10,6 +10,7 @@
 extern xcb_connection_t* c;
 extern xcb_window_t root;
 extern uint16_t numlockmask;
+extern xcb_atom_t wm_protocols;
 
 void* emalloc(size_t size)
 {

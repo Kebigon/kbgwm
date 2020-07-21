@@ -61,6 +61,8 @@ xcb_screen_t* screen;
 uint_least16_t previous_x;
 uint_least16_t previous_y;
 uint16_t numlockmask = 0;
+xcb_atom_t wm_protocols;
+xcb_atom_t wm_delete_window;
 
 #define focused_client workspaces[current_workspace]
 uint_fast8_t current_workspace = 0;

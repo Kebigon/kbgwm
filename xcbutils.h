@@ -28,9 +28,6 @@ xcb_keysym_t xcb_get_keysym(xcb_keycode_t);
 #define WM_DELETE_WINDOW "WM_DELETE_WINDOW"
 #define WM_PROTOCOLS "WM_PROTOCOLS"
 
-xcb_atom_t wm_protocols;
-xcb_atom_t wm_delete_window;
-
 xcb_atom_t xcb_get_atom(const char*);
 bool xcb_send_atom(client*, xcb_atom_t);
 
