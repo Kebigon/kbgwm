@@ -37,9 +37,7 @@ static void handle_button_release(xcb_button_release_event_t*);
 static void handle_destroy_notify(xcb_destroy_notify_event_t*);
 static void handle_key_press(xcb_key_press_event_t*);
 static void handle_map_request(xcb_map_request_event_t*);
-static void handle_mapping_notify(xcb_mapping_notify_event_t*);
 static void handle_motion_notify(xcb_motion_notify_event_t*);
-static void handle_unmap_notify(xcb_unmap_notify_event_t*);
 static void quit(const Arg*);
 static void workspace_change(const Arg*);
 static void workspace_next(const Arg*);
@@ -49,6 +47,7 @@ static void workspace_set(uint_fast8_t);
 
 static inline int16_t int16_in_range(int16_t, int16_t, int16_t);
 static inline uint16_t uint16_in_range(uint16_t, uint16_t, uint16_t);
+static inline void debug_print_event();
 static inline void debug_print_globals();
 
 #include "config.h"
@@ -89,6 +88,84 @@ inline uint16_t uint16_in_range(uint16_t value, uint16_t min, uint16_t max)
 	else
 		return value;
 }
+
+void debug_print_event(xcb_generic_event_t* event)
+{
+	switch (event->response_type & ~0x80)
+	{
+		case XCB_KEY_PRESS:
+		{
+			xcb_key_press_event_t* event2 = (xcb_key_press_event_t*) event;
+			printf("=======[ event: XCB_KEY_PRESS ]=======\n");
+			printf("keycode=%d modifiers=%d\n", event2->detail, event2->state);
+			debug_print_globals();
+			break;
+		}
+		case XCB_BUTTON_PRESS:
+		{
+			xcb_button_press_event_t* event2 = (xcb_button_press_event_t*) event;
+			printf("=======[ event: XCB_BUTTON_PRESS ]=======\n");
+			printf("window=%d modifiers=%d button=%d\n", event2->child, event2->state, event2->detail);
+			debug_print_globals();
+			break;
+		}
+		case XCB_BUTTON_RELEASE:
+		{
+			printf("=======[ event: XCB_BUTTON_RELEASE ]=======\n");
+			debug_print_globals();
+			break;
+		}
+		case XCB_MOTION_NOTIFY:
+		{
+			xcb_motion_notify_event_t* event2 = (xcb_motion_notify_event_t*) event;
+			printf("=======[ event: XCB_MOTION_NOTIFY ]=======\n");
+			printf("root_x=%d root_y=%d event_x=%d event_y=%d\n", event2->root_x, event2->root_y, event2->event_x, event2->event_y);
+			debug_print_globals();
+			break;
+		}
+		case XCB_DESTROY_NOTIFY:
+		{
+			xcb_destroy_notify_event_t* event2 = (xcb_destroy_notify_event_t*) event;
+			printf("=======[ event: XCB_DESTROY_NOTIFY ]=======\n");
+			printf("window=%d\n", event2->window);
+			debug_print_globals();
+			break;
+		}
+		case XCB_UNMAP_NOTIFY:
+		{
+			xcb_unmap_notify_event_t* event2 = (xcb_unmap_notify_event_t*) event;
+			printf("=======[ event: XCB_UNMAP_NOTIFY ]=======\n");
+			printf("window=%d\n", event2->window);
+			debug_print_globals();
+			break;
+		}
+		case XCB_MAP_REQUEST:
+		{
+			xcb_map_request_event_t* event2 = (xcb_map_request_event_t*) event;
+			printf("=======[ event: XCB_MAP_REQUEST ]=======\n");
+			printf("parent %d window %d\n", event2->parent, event2->window);
+			debug_print_globals();
+			break;
+		}
+		case XCB_MAPPING_NOTIFY:
+		{
+			xcb_mapping_notify_event_t* event2 = (xcb_mapping_notify_event_t*) event;
+			printf("=======[ event: XCB_MAPPING_NOTIFY ]=======\n");
+			printf("sequence %d\n", event2->sequence);
+			printf("request %d\n", event2->request);
+			printf("first_keycode %d\n", event2->first_keycode);
+			printf("count %d\n", event2->count);
+			debug_print_globals();
+			break;
+		}
+		default:
+		{
+			printf("=======[ event: unlogged, response type %d ]=======\n", event->response_type & ~0x80);
+			break;
+		}
+	}
+}
+
 inline void debug_print_globals()
 {
 	printf("current_workspace=%d\n", current_workspace);
@@ -110,7 +187,7 @@ inline void debug_print_globals()
 
 void mousemove(__attribute__((unused))const Arg* arg)
 {
-	printf("mousemove\n");
+	printf("=======[ user action: mousemove ]=======\n");
 	moving = true;
 
 	xcb_grab_pointer(c, 0, screen->root, XCB_EVENT_MASK_BUTTON_MOTION | XCB_EVENT_MASK_BUTTON_RELEASE, XCB_GRAB_MODE_ASYNC,
@@ -122,7 +199,7 @@ void mousemove(__attribute__((unused))const Arg* arg)
 
 void mouseresize(__attribute__((unused))const Arg* arg)
 {
-	printf("mouseresize\n");
+	printf("=======[ user action: mouseresize ]=======\n");
 	resizing = true;
 
 	xcb_grab_pointer(c, 0, screen->root, XCB_EVENT_MASK_BUTTON_MOTION | XCB_EVENT_MASK_BUTTON_RELEASE, XCB_GRAB_MODE_ASYNC,
@@ -137,6 +214,7 @@ void eventLoop()
 	while (running)
 	{
 		xcb_generic_event_t* event = xcb_wait_for_event(c);
+		debug_print_event(event);
 
 		switch (event->response_type & ~0x80)
 		{
@@ -160,16 +238,8 @@ void eventLoop()
 				handle_destroy_notify((xcb_destroy_notify_event_t*) event);
 				break;
 
-			case XCB_UNMAP_NOTIFY:
-				handle_unmap_notify((xcb_unmap_notify_event_t*) event);
-				break;
-
 			case XCB_MAP_REQUEST:
 				handle_map_request((xcb_map_request_event_t*) event);
-				break;
-
-			case XCB_MAPPING_NOTIFY:
-				handle_mapping_notify((xcb_mapping_notify_event_t*) event);
 				break;
 
 			default:
@@ -178,13 +248,14 @@ void eventLoop()
 		}
 
 		free(event);
-		printf("\n");
+		printf("=======[ event: DONE ]=======\n\n");
 	}
 }
 
 void start(const Arg* arg)
 {
-	printf("start %s\n", arg->cmd[0]);
+	printf("=======[ user action: start ]=======\n");
+	printf("cmd %s\n", arg->cmd[0]);
 
 	if (fork() == 0)
 	{
@@ -370,6 +441,8 @@ void client_sanitize_dimensions(client* client)
 
 void client_kill(__attribute__((unused))const Arg* arg)
 {
+	printf("=======[ user action: client_kill ]=======\n");
+
 	// No client are focused
 	if (workspaces[current_workspace] == NULL)
 		return; // Nothing to be done
@@ -385,6 +458,8 @@ void client_kill(__attribute__((unused))const Arg* arg)
 
 void client_toggle_maximize(__attribute__((unused))const Arg* arg)
 {
+	printf("=======[ user action: client_toggle_maximize ]=======\n");
+
 	// No client are focused
 	if (workspaces[current_workspace] == NULL)
 		return; // Nothing to be done
@@ -448,6 +523,8 @@ void focus_apply()
 // arg->b : reverse mode
 void focus_next(const Arg* arg)
 {
+	printf("=======[ user action: focus_next ]=======\n");
+
 	// No clients in the current workspace list
 	// Only one client in the current workspace list
 	if (workspaces[current_workspace] == NULL || workspaces[current_workspace]->next == workspaces[current_workspace])
@@ -478,7 +555,6 @@ void focus_unfocus()
 
 void handle_button_press(xcb_button_press_event_t* event)
 {
-	printf("handle_button_press: client=%d modifier=%d button=%d\n", event->child, event->state, event->detail);
 	debug_print_globals();
 
 	// Click on the root window
@@ -507,14 +583,10 @@ void handle_button_press(xcb_button_press_event_t* event)
 			break;
 		}
 	}
-
-	printf("handle_button_press: done\n");
 }
 
 void handle_button_release(__attribute__((unused)) xcb_button_release_event_t* event)
 {
-	printf("XCB_BUTTON_RELEASE\n");
-
 	assert(moving || resizing);
 
 	xcb_ungrab_pointer(c, XCB_CURRENT_TIME);
@@ -526,7 +598,6 @@ void handle_button_release(__attribute__((unused)) xcb_button_release_event_t* e
 
 void handle_destroy_notify(xcb_destroy_notify_event_t* event)
 {
-	printf("XCB_DESTROY_NOTIFY: window=%d\n", event->window);
 	client_remove_all_workspaces(event->window);
 	if (focused_client != NULL)
 		focus_apply();
@@ -534,7 +605,6 @@ void handle_destroy_notify(xcb_destroy_notify_event_t* event)
 
 void handle_key_press(xcb_key_press_event_t* event)
 {
-	printf("XCB_KEY_PRESS: detail=%d state=%d\n", event->detail, event->state);
 	xcb_keysym_t keysym = xcb_get_keysym(event->detail);
 
 	for (uint_fast8_t i = 0; i < LENGTH(keys); i++)
@@ -549,19 +619,7 @@ void handle_key_press(xcb_key_press_event_t* event)
 
 void handle_map_request(xcb_map_request_event_t* event)
 {
-	printf("handle_map_request: parent %d xcb_window_t %d\n", event->parent, event->window);
-
 	client_create(event->window);
-
-	printf("handle_map_request: done\n");
-}
-
-void handle_mapping_notify(xcb_mapping_notify_event_t* event)
-{
-	printf("sequence %d\n", event->sequence);
-	printf("request %d\n", event->request);
-	printf("first_keycode %d\n", event->first_keycode);
-	printf("count %d\n", event->count);
 }
 
 void handle_motion_notify(xcb_motion_notify_event_t* event)
@@ -571,9 +629,6 @@ void handle_motion_notify(xcb_motion_notify_event_t* event)
 	assert(moving || resizing);
 	assert(client != NULL);
 	assert(client->id != root);
-
-	printf("handle_motionnotify: root_x=%d root_y=%d event_x=%d event_y=%d\n", event->root_x, event->root_y, event->event_x,
-	       event->event_y);
 
 	if (client->maximized)
 		client_unmaximize(client);
@@ -605,13 +660,9 @@ void handle_motion_notify(xcb_motion_notify_event_t* event)
 	xcb_flush(c);
 }
 
-void handle_unmap_notify(xcb_unmap_notify_event_t* event)
-{
-	printf("XCB_UNMAP_NOTIFY: window=%d\n", event->window);
-}
-
 void quit(__attribute__((unused))const Arg* arg)
 {
+	printf("=======[ user action: quit ]=======\n");
 	running = false;
 }
 
@@ -703,28 +754,31 @@ void setup_screen()
 
 void workspace_change(const Arg* arg)
 {
-	printf("workspace_change: i=%d\n", arg->i);
+	printf("=======[ user action: focus_next ]=======\n");
+	printf("i=%d\n", arg->i);
+
 	workspace_set(arg->i);
-	printf("workspace_change: done\n");
 }
 
 void workspace_next(__attribute__((unused))const Arg* arg)
 {
-	printf("workspace_next\n");
+	printf("=======[ user action: workspace_next ]=======\n");
+
 	workspace_set(current_workspace + 1 == NB_WORKSPACES ? 0 : current_workspace + 1);
-	printf("workspace_next: done\n");
 }
 
 void workspace_previous(__attribute__((unused))const Arg* arg)
 {
-	printf("workspace_previous\n");
+	printf("=======[ user action: workspace_previous ]=======\n");
 	workspace_set(current_workspace == 0 ? NB_WORKSPACES - 1 : current_workspace - 1);
-	printf("workspace_previous: done\n");
 }
 
 void workspace_send(const Arg* arg)
 {
-	printf("workspace_send: i=%d\n", arg->i);
+	printf("=======[ user action: workspace_send ]=======\n");
+	printf("i=%d\n", arg->i);
+	debug_print_globals();
+
 	uint_fast8_t new_workspace = arg->i;
 
 	if (current_workspace == new_workspace || workspaces[current_workspace] == NULL)
