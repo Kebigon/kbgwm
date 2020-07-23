@@ -364,7 +364,7 @@ client* client_find_workspace(xcb_window_t id, uint_fast8_t workspace)
 		{
 			if (client->id == id)
 				return client;
-		} while ((client = client->next) != workspaces[current_workspace]);
+		} while ((client = client->next) != workspaces[workspace]);
 
 	return NULL;
 }
