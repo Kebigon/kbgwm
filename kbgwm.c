@@ -715,9 +715,10 @@ void setup_events()
 	xcb_change_window_attributes_checked(c, root, XCB_CW_EVENT_MASK, values);
 
 	xcb_grab_button(c, 1, root, XCB_EVENT_MASK_BUTTON_PRESS, XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, root, XCB_NONE,
-	                XCB_BUTTON_INDEX_1, 0 | XCB_MOD_MASK_2);
+	                XCB_BUTTON_INDEX_1, XCB_MOD_MASK_ANY);
+
 	xcb_grab_button(c, 1, root, XCB_EVENT_MASK_BUTTON_PRESS, XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, root, XCB_NONE,
-	                XCB_BUTTON_INDEX_3, 0 | XCB_MOD_MASK_2);
+	                XCB_BUTTON_INDEX_3, XCB_MOD_MASK_ANY);
 
 	for (uint_fast8_t i = 0; i != LENGTH(keys); i++)
 		xcb_register_key_events(keys[i]);
