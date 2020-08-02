@@ -50,15 +50,6 @@ void xcb_register_key_events(Key key)
 	free(keycodes);
 }
 
-void xcb_register_button_events(Button button)
-{
-	uint16_t modifiers[] = { 0, numlockmask, XCB_MOD_MASK_LOCK, numlockmask | XCB_MOD_MASK_LOCK };
-
-	for (int i = 0; i != LENGTH(modifiers); i++)
-		xcb_grab_button(c, 0, root, BUTTON_EVENT_MASK, XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, root, XCB_NONE, button.keysym,
-		                button.modifiers | modifiers[i]);
-}
-
 /*
  * Get keycodes from a keysym
  * TODO: check if there's a way to keep keysyms

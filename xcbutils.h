@@ -16,7 +16,6 @@ void* emalloc(size_t size);
  * registering events
  */
 void xcb_register_key_events(Key key);
-void xcb_register_button_events(Button button);
 
 xcb_keycode_t* xcb_get_keycodes(xcb_keysym_t);
 xcb_keysym_t xcb_get_keysym(xcb_keycode_t);

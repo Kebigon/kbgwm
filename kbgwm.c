@@ -105,7 +105,7 @@ void debug_print_event(xcb_generic_event_t* event)
 		{
 			xcb_button_press_event_t* event2 = (xcb_button_press_event_t*) event;
 			printf("=======[ event: XCB_BUTTON_PRESS ]=======\n");
-			printf("window=%d modifiers=%d button=%d\n", event2->child, event2->state, event2->detail);
+			printf("window=%d child=%d modifiers=%d button=%d\n", event2->event, event2->child, event2->state, event2->detail);
 			debug_print_globals();
 			break;
 		}
@@ -496,6 +496,35 @@ void client_unmaximize(client* client)
 	xcb_configure_window(c, focused_client->id, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, values);
 }
 
+void client_grab_buttons(client* client, bool focused)
+{
+	uint16_t modifiers[] = { 0, numlockmask, XCB_MOD_MASK_LOCK, numlockmask | XCB_MOD_MASK_LOCK };
+
+	xcb_ungrab_button(c, XCB_BUTTON_INDEX_ANY, client->id, XCB_MOD_MASK_ANY);
+
+	// The client is not the focused one -> grab everything
+	if (!focused)
+	{
+		xcb_grab_button(c, 1, client->id, BUTTON_EVENT_MASK, XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, root, XCB_NONE,
+		                XCB_BUTTON_INDEX_ANY, XCB_MOD_MASK_ANY);
+	}
+
+	// The client is the focused one -> grab only the configured buttons
+	else
+	{
+		for (unsigned int i = 0; i != LENGTH(buttons); i++)
+		{
+			Button button = buttons[i];
+
+			for (unsigned int j = 0; j != LENGTH(modifiers); j++)
+			{
+				xcb_grab_button(c, 0, client->id, BUTTON_EVENT_MASK, XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, root, XCB_NONE,
+				                button.keysym, button.modifiers | modifiers[j]);
+			}
+		}
+	}
+}
+
 /*
  * Focus
  */
@@ -514,6 +543,7 @@ void focus_apply()
 
 	// Set the keyboard on the focused window
 	xcb_set_input_focus(c, XCB_INPUT_FOCUS_POINTER_ROOT, workspaces[current_workspace]->id, XCB_CURRENT_TIME);
+	client_grab_buttons(workspaces[current_workspace], true);
 	xcb_flush(c);
 
 	printf("focus_apply: done\n");
@@ -540,13 +570,16 @@ void focus_next(const Arg* arg)
 // Remove the focus from the current client
 void focus_unfocus()
 {
+	client* client = workspaces[current_workspace];
+
 	// No client are focused
-	if (workspaces[current_workspace] == NULL)
+	if (client == NULL)
 		return; // Nothing to be done
 
 	// Change the border color to UNFOCUS_COLOR
-	xcb_change_window_attributes(c, workspaces[current_workspace]->id, XCB_CW_BORDER_PIXEL, (uint32_t[] )
+	xcb_change_window_attributes(c, client->id, XCB_CW_BORDER_PIXEL, (uint32_t[] )
 	                             { 0xFF000000 | UNFOCUS_COLOR });
+	client_grab_buttons(workspaces[current_workspace], false);
 }
 
 /*
@@ -555,16 +588,16 @@ void focus_unfocus()
 
 void handle_button_press(xcb_button_press_event_t* event)
 {
-	debug_print_globals();
-
 	// Click on the root window
-	if (event->child == 0)
+	if (event->event == event->root && event->child == 0)
 		return; // Nothing to be done
 
+	xcb_window_t window = event->event == event->root ? event->child : event->event;
+
 	// The window clicked is not the one in focus, we have to focus it
-	if (workspaces[current_workspace] == NULL || event->child != workspaces[current_workspace]->id)
+	if (workspaces[current_workspace] == NULL || window != workspaces[current_workspace]->id)
 	{
-		client* client = client_find(event->child);
+		client* client = client_find(window);
 		assert(client != NULL);
 
 		focus_unfocus();
@@ -587,7 +620,9 @@ void handle_button_press(xcb_button_press_event_t* event)
 
 void handle_button_release(__attribute__((unused)) xcb_button_release_event_t* event)
 {
-	assert(moving || resizing);
+	// We were not moving or resizing the focused client
+	if (!moving && !resizing)
+		return; // Nothing to be done
 
 	xcb_ungrab_pointer(c, XCB_CURRENT_TIME);
 	xcb_flush(c);
@@ -714,17 +749,8 @@ void setup_events()
 
 	xcb_change_window_attributes_checked(c, root, XCB_CW_EVENT_MASK, values);
 
-	xcb_grab_button(c, 1, root, XCB_EVENT_MASK_BUTTON_PRESS, XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, root, XCB_NONE,
-	                XCB_BUTTON_INDEX_1, XCB_MOD_MASK_ANY);
-
-	xcb_grab_button(c, 1, root, XCB_EVENT_MASK_BUTTON_PRESS, XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, root, XCB_NONE,
-	                XCB_BUTTON_INDEX_3, XCB_MOD_MASK_ANY);
-
 	for (uint_fast8_t i = 0; i != LENGTH(keys); i++)
 		xcb_register_key_events(keys[i]);
-
-	for (uint_fast8_t i = 0; i != LENGTH(buttons); i++)
-		xcb_register_button_events(buttons[i]);
 
 	xcb_flush(c);
 }
