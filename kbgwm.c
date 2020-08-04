@@ -139,6 +139,14 @@ void debug_print_event(xcb_generic_event_t* event)
 			debug_print_globals();
 			break;
 		}
+		case XCB_MAP_NOTIFY:
+		{
+			xcb_map_notify_event_t* event2 = (xcb_map_notify_event_t*) event;
+			printf("=======[ event: XCB_MAP_NOTIFY ]=======\n");
+			printf("window=%d\n", event2->window);
+			debug_print_globals();
+			break;
+		}
 		case XCB_MAP_REQUEST:
 		{
 			xcb_map_request_event_t* event2 = (xcb_map_request_event_t*) event;
@@ -844,6 +852,9 @@ void workspace_set(uint_fast8_t new_workspace)
 
 	xcb_flush(c);
 	current_workspace = new_workspace;
+
+	if (workspaces[current_workspace] != NULL)
+		focus_apply();
 
 	printf("workspace_set: done\n");
 }
