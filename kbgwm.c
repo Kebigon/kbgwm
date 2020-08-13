@@ -38,6 +38,7 @@ static void handle_destroy_notify(xcb_destroy_notify_event_t*);
 static void handle_key_press(xcb_key_press_event_t*);
 static void handle_map_request(xcb_map_request_event_t*);
 static void handle_motion_notify(xcb_motion_notify_event_t*);
+static void handle_unmap_notify(xcb_unmap_notify_event_t*);
 static void quit(const Arg*);
 static void workspace_change(const Arg*);
 static void workspace_next(const Arg*);
@@ -135,7 +136,8 @@ void debug_print_event(xcb_generic_event_t* event)
 		{
 			xcb_unmap_notify_event_t* event2 = (xcb_unmap_notify_event_t*) event;
 			printf("=======[ event: XCB_UNMAP_NOTIFY ]=======\n");
-			printf("window=%d\n", event2->window);
+			printf("window=%d event=%d from_configure=%d send_event=%d\n", event2->window, event2->event, event2->from_configure,
+			       event->response_type & 0x80);
 			debug_print_globals();
 			break;
 		}
@@ -187,7 +189,9 @@ inline void debug_print_globals()
 			client* client = workspaces[workspace];
 			do
 			{
-				printf("%d\tid=%d\n", workspace, client->id);
+				printf("%d\tid=%d x=%d y=%d width=%d height=%d min_width=%d min_height=%d max_width=%d max_height=%d\n", workspace,
+				       client->id, client->x, client->y, client->width, client->height, client->min_width, client->min_height,
+				       client->max_width, client->max_height);
 			} while ((client = client->next) != workspaces[workspace]);
 		}
 	}
@@ -244,6 +248,10 @@ void eventLoop()
 
 			case XCB_DESTROY_NOTIFY:
 				handle_destroy_notify((xcb_destroy_notify_event_t*) event);
+				break;
+
+			case XCB_UNMAP_NOTIFY:
+				handle_unmap_notify((xcb_unmap_notify_event_t*) event);
 				break;
 
 			case XCB_MAP_REQUEST:
@@ -324,10 +332,10 @@ void client_create(xcb_window_t id)
 	client* new_client = emalloc(sizeof(client));
 
 	new_client->id = id;
-	new_client->x = hints.flags & XCB_ICCCM_SIZE_HINT_P_POSITION ? hints.x : geometry->x;
-	new_client->y = hints.flags & XCB_ICCCM_SIZE_HINT_P_POSITION ? hints.y : geometry->y;
-	new_client->width = hints.flags & XCB_ICCCM_SIZE_HINT_P_SIZE ? hints.width : geometry->width;
-	new_client->height = hints.flags & XCB_ICCCM_SIZE_HINT_P_SIZE ? hints.height : geometry->height;
+	new_client->x = geometry->x;
+	new_client->y = geometry->y;
+	new_client->width = geometry->width;
+	new_client->height = geometry->height;
 	new_client->min_width = hints.flags & XCB_ICCCM_SIZE_HINT_P_MIN_SIZE ? hints.min_width : 0;
 	new_client->min_height = hints.flags & XCB_ICCCM_SIZE_HINT_P_MIN_SIZE ? hints.min_height : 0;
 	new_client->max_width = hints.flags & XCB_ICCCM_SIZE_HINT_P_MAX_SIZE ? hints.max_width : 0xFFFF;
@@ -359,6 +367,18 @@ void client_create(xcb_window_t id)
 client* client_find(xcb_window_t id)
 {
 	return client_find_workspace(id, current_workspace);
+}
+
+client* client_find_all_workspaces(xcb_window_t id)
+{
+	for (uint_fast8_t workspace = 0; workspace != NB_WORKSPACES; workspace++)
+	{
+		client* client = client_find_workspace(id, workspace);
+		if (client != NULL)
+			return client;
+	}
+
+	return NULL;
 }
 
 client* client_find_workspace(xcb_window_t id, uint_fast8_t workspace)
@@ -663,6 +683,24 @@ void handle_key_press(xcb_key_press_event_t* event)
 void handle_map_request(xcb_map_request_event_t* event)
 {
 	client_create(event->window);
+}
+
+void handle_unmap_notify(xcb_unmap_notify_event_t* event)
+{
+	client* client = client_find_all_workspaces(event->window);
+
+	// We don't know this client
+	if (client == NULL)
+		return; // Nothing to be done
+
+	//  true if this came from a SendEvent request
+	bool send_event = event->response_type & 0x80;
+	if (!send_event)
+		return; // Nothing to be done
+
+	client_remove_all_workspaces(event->window);
+	if (focused_client != NULL)
+		focus_apply();
 }
 
 void handle_motion_notify(xcb_motion_notify_event_t* event)
