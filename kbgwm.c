@@ -509,8 +509,8 @@ void client_maximize(client* client)
 
 	client->maximized = true;
 
-	uint32_t values[] = { 0, 0, screen->width_in_pixels - BORDER_WIDTH_X2, screen->height_in_pixels - BORDER_WIDTH_X2 };
-	xcb_configure_window(c, focused_client->id, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, values);
+	uint32_t values[] = { 0, 0, screen->width_in_pixels, screen->height_in_pixels, 0 };
+	xcb_configure_window(c, focused_client->id, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT | XCB_CONFIG_WINDOW_BORDER_WIDTH, values);
 }
 
 void client_unmaximize(client* client)
@@ -520,8 +520,8 @@ void client_unmaximize(client* client)
 
 	client->maximized = false;
 
-	uint32_t values[] = { client->x, client->y, client->width, client->height };
-	xcb_configure_window(c, focused_client->id, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, values);
+	uint32_t values[] = { client->x, client->y, client->width, client->height, BORDER_WIDTH };
+	xcb_configure_window(c, focused_client->id, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT | XCB_CONFIG_WINDOW_BORDER_WIDTH, values);
 }
 
 void client_grab_buttons(client* client, bool focused)
