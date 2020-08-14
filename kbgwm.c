@@ -34,6 +34,7 @@ static void focus_next(const Arg*);
 static void focus_unfocus();
 static void handle_button_press(xcb_button_press_event_t*);
 static void handle_button_release(xcb_button_release_event_t*);
+static void handle_configure_request(xcb_configure_request_event_t*);
 static void handle_destroy_notify(xcb_destroy_notify_event_t*);
 static void handle_key_press(xcb_key_press_event_t*);
 static void handle_map_request(xcb_map_request_event_t*);
@@ -157,6 +158,14 @@ void debug_print_event(xcb_generic_event_t* event)
 			debug_print_globals();
 			break;
 		}
+		case XCB_CONFIGURE_REQUEST:
+		{
+			xcb_configure_request_event_t* event2 = (xcb_configure_request_event_t*) event;
+			printf("=======[ event: XCB_CONFIGURE_REQUEST ]=======\n");
+			printf("parent %d window %d\n", event2->parent, event2->window);
+			debug_print_globals();
+			break;
+		}
 		case XCB_MAPPING_NOTIFY:
 		{
 			xcb_mapping_notify_event_t* event2 = (xcb_mapping_notify_event_t*) event;
@@ -256,6 +265,10 @@ void eventLoop()
 
 			case XCB_MAP_REQUEST:
 				handle_map_request((xcb_map_request_event_t*) event);
+				break;
+
+			case XCB_CONFIGURE_REQUEST:
+				handle_configure_request((xcb_configure_request_event_t*) event);
 				break;
 
 			default:
@@ -657,6 +670,81 @@ void handle_button_release(__attribute__((unused)) xcb_button_release_event_t* e
 
 	moving = false;
 	resizing = false;
+}
+
+void handle_configure_request(xcb_configure_request_event_t* event)
+{
+	client* client = client_find_all_workspaces(event->window);
+
+	if (client != NULL)
+	{
+		// The client is maximized
+		if (client->maximized)
+			return; // Nothing to be done
+
+		if (event->value_mask & XCB_CONFIG_WINDOW_X)
+			client->x = event->x;
+		if (event->value_mask & XCB_CONFIG_WINDOW_Y)
+			client->y = event->y;
+		if (event->value_mask & XCB_CONFIG_WINDOW_WIDTH)
+			client->width = event->width;
+		if (event->value_mask & XCB_CONFIG_WINDOW_HEIGHT)
+			client->height = event->height;
+
+		// Ignored: XCB_CONFIG_WINDOW_BORDER_WIDTH, XCB_CONFIG_WINDOW_SIBLING, XCB_CONFIG_WINDOW_STACK_MODE
+
+		client_sanitize_position(client);
+		client_sanitize_dimensions(client);
+
+		uint32_t values[4] = { client->x, client->y, client->width, client->height };
+		xcb_configure_window(c, client->id,
+		                     XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, values);
+		xcb_flush(c);
+	}
+
+	// We don't know the client -> apply the requested change
+	else
+	{
+		uint16_t value_mask = 0;
+		uint32_t value_list[7];
+		int8_t i = 0;
+
+		if (event->value_mask & XCB_CONFIG_WINDOW_X)
+		{
+			value_mask |= XCB_CONFIG_WINDOW_X;
+			value_list[i++] = event->x;
+		}
+		if (event->value_mask & XCB_CONFIG_WINDOW_Y)
+		{
+			value_mask |= XCB_CONFIG_WINDOW_Y;
+			value_list[i++] = event->y;
+		}
+		if (event->value_mask & XCB_CONFIG_WINDOW_WIDTH)
+		{
+			value_mask |= XCB_CONFIG_WINDOW_WIDTH;
+			value_list[i++] = event->width;
+		}
+		if (event->value_mask & XCB_CONFIG_WINDOW_HEIGHT)
+		{
+			value_mask |= XCB_CONFIG_WINDOW_HEIGHT;
+			value_list[i++] = event->height;
+		}
+		if (event->value_mask & XCB_CONFIG_WINDOW_SIBLING)
+		{
+			value_mask |= XCB_CONFIG_WINDOW_SIBLING;
+			value_list[i++] = event->sibling;
+		}
+		if (event->value_mask & XCB_CONFIG_WINDOW_STACK_MODE)
+		{
+			value_mask |= XCB_CONFIG_WINDOW_STACK_MODE;
+			value_list[i++] = event->stack_mode;
+		}
+		if (i != 0)
+		{
+			xcb_configure_window(c, event->window, value_mask, value_list);
+			xcb_flush(c);
+		}
+	}
 }
 
 void handle_destroy_notify(xcb_destroy_notify_event_t* event)
