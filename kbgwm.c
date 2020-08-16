@@ -357,10 +357,6 @@ void client_create(xcb_window_t id)
 
 	client_sanitize_dimensions(new_client);
 
-	focus_unfocus();
-	client_add(new_client);
-	focus_apply();
-
 	printf("new window: id=%d x=%d y=%d width=%d height=%d min_width=%d min_height=%d max_width=%d max_height=%d\n", id,
 	       new_client->x, new_client->y, new_client->width, new_client->height, new_client->min_width, new_client->min_height,
 	       new_client->max_width, new_client->max_height);
@@ -373,6 +369,11 @@ void client_create(xcb_window_t id)
 	xcb_flush(c);
 
 	free(geometry);
+
+	focus_unfocus();
+	client_add(new_client);
+	focus_apply();
+
 	printf("client_create: done\n");
 }
 
