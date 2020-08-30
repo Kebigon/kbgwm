@@ -1,3 +1,21 @@
+/*
+ * kbgwm, a sucklessy floating window manager
+ * Copyright (C) 2020 Kebigon
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -9,52 +27,13 @@
 #include <X11/keysym.h>
 #include <inttypes.h>
 #include "xcbutils.h"
+#include "client.h"
+#include "events.h"
+#include "types.h"
+#include <X11/keysym.h>
 
-#define CLEANMASK(mask) (mask & ~(numlockmask|XCB_MOD_MASK_LOCK))
-
-static void start(const Arg* arg);
-static void mousemove(const Arg* arg);
-static void mouseresize(const Arg* arg);
-
-static void client_add(client*);
-static void client_add_workspace(client*, uint_fast8_t);
-static client* client_find(xcb_window_t);
-static client* client_find_workspace(xcb_window_t, uint_fast8_t);
-static client* client_remove();
-static client* client_remove_workspace(uint_fast8_t);
-static void client_kill(const Arg*);
-static void client_create(xcb_window_t);
-static void client_sanitize_position(client*);
-static void client_sanitize_dimensions(client*);
-static void client_toggle_maximize(const Arg*);
-static void client_maximize(client*);
-static void client_unmaximize(client*);
-static void focus_apply();
-static void focus_next(const Arg*);
-static void focus_unfocus();
-static void handle_button_press(xcb_button_press_event_t*);
-static void handle_button_release(xcb_button_release_event_t*);
-static void handle_configure_request(xcb_configure_request_event_t*);
-static void handle_destroy_notify(xcb_destroy_notify_event_t*);
-static void handle_key_press(xcb_key_press_event_t*);
-static void handle_map_request(xcb_map_request_event_t*);
-static void handle_motion_notify(xcb_motion_notify_event_t*);
-static void handle_unmap_notify(xcb_unmap_notify_event_t*);
-static void quit(const Arg*);
-static void workspace_change(const Arg*);
-static void workspace_next(const Arg*);
-static void workspace_previous(const Arg*);
-static void workspace_send(const Arg*);
-static void workspace_set(uint_fast8_t);
-
-static inline int16_t int16_in_range(int16_t, int16_t, int16_t);
-static inline uint16_t uint16_in_range(uint16_t, uint16_t, uint16_t);
-static inline void debug_print_event();
-static inline void debug_print_globals();
-
+#include "kbgwm.h"
 #include "config.h"
-
-#define BORDER_WIDTH_X2 (BORDER_WIDTH << 1)
 
 bool running = true;
 bool moving = false;
@@ -68,30 +47,31 @@ uint16_t numlockmask = 0;
 xcb_atom_t wm_protocols;
 xcb_atom_t wm_delete_window;
 
-#define focused_client workspaces[current_workspace]
 uint_fast8_t current_workspace = 0;
-static client* workspaces[NB_WORKSPACES];
+client* workspaces[NB_WORKSPACES];
 
-inline int16_t int16_in_range(int16_t value, int16_t min, int16_t max)
+static inline void debug_print_globals()
 {
-	if (value < min)
-		return min;
-	else if (value > max)
-		return max;
-	else
-		return value;
-}
-inline uint16_t uint16_in_range(uint16_t value, uint16_t min, uint16_t max)
-{
-	if (value < min)
-		return min;
-	else if (value > max)
-		return max;
-	else
-		return value;
+	printf("current_workspace=%d\n", current_workspace);
+
+	for (int workspace = 0; workspace != workspaces_length; workspace++)
+	{
+		if (workspaces[workspace] == NULL)
+			printf("%d\tNULL\n", workspace);
+		else
+		{
+			client* client = workspaces[workspace];
+			do
+			{
+				printf("%d\tid=%d x=%d y=%d width=%d height=%d min_width=%d min_height=%d max_width=%d max_height=%d\n", workspace,
+				       client->id, client->x, client->y, client->width, client->height, client->min_width, client->min_height,
+				       client->max_width, client->max_height);
+			} while ((client = client->next) != workspaces[workspace]);
+		}
+	}
 }
 
-void debug_print_event(xcb_generic_event_t* event)
+static void debug_print_event(xcb_generic_event_t* event)
 {
 	switch (event->response_type & ~0x80)
 	{
@@ -185,27 +165,6 @@ void debug_print_event(xcb_generic_event_t* event)
 	}
 }
 
-inline void debug_print_globals()
-{
-	printf("current_workspace=%d\n", current_workspace);
-
-	for (int workspace = 0; workspace != NB_WORKSPACES; workspace++)
-	{
-		if (workspaces[workspace] == NULL)
-			printf("%d\tNULL\n", workspace);
-		else
-		{
-			client* client = workspaces[workspace];
-			do
-			{
-				printf("%d\tid=%d x=%d y=%d width=%d height=%d min_width=%d min_height=%d max_width=%d max_height=%d\n", workspace,
-				       client->id, client->x, client->y, client->width, client->height, client->min_width, client->min_height,
-				       client->max_width, client->max_height);
-			} while ((client = client->next) != workspaces[workspace]);
-		}
-	}
-}
-
 void mousemove(__attribute__((unused))const Arg* arg)
 {
 	printf("=======[ user action: mousemove ]=======\n");
@@ -237,44 +196,7 @@ void eventLoop()
 		xcb_generic_event_t* event = xcb_wait_for_event(c);
 		debug_print_event(event);
 
-		switch (event->response_type & ~0x80)
-		{
-			case XCB_KEY_PRESS:
-				handle_key_press((xcb_key_press_event_t*) event);
-				break;
-
-			case XCB_BUTTON_PRESS:
-				handle_button_press((xcb_button_press_event_t*) event);
-				break;
-
-			case XCB_BUTTON_RELEASE:
-				handle_button_release((xcb_button_release_event_t*) event);
-				break;
-
-			case XCB_MOTION_NOTIFY:
-				handle_motion_notify((xcb_motion_notify_event_t*) event);
-				break;
-
-			case XCB_DESTROY_NOTIFY:
-				handle_destroy_notify((xcb_destroy_notify_event_t*) event);
-				break;
-
-			case XCB_UNMAP_NOTIFY:
-				handle_unmap_notify((xcb_unmap_notify_event_t*) event);
-				break;
-
-			case XCB_MAP_REQUEST:
-				handle_map_request((xcb_map_request_event_t*) event);
-				break;
-
-			case XCB_CONFIGURE_REQUEST:
-				handle_configure_request((xcb_configure_request_event_t*) event);
-				break;
-
-			default:
-				printf("Received unhandled event, response type %d\n", event->response_type & ~0x80);
-				break;
-		}
+		handle_event(event);
 
 		free(event);
 		printf("=======[ event: DONE ]=======\n\n");
@@ -295,274 +217,6 @@ void start(const Arg* arg)
 		{
 			perror(arg->cmd[0]);
 			exit(-1);
-		}
-	}
-}
-
-/*
- * Clients
- */
-
-// Add a client to the current workspace list
-void client_add(client* client)
-{
-	client_add_workspace(client, current_workspace);
-}
-
-// Add a client to a workspace list
-void client_add_workspace(client* client, uint_fast8_t workspace)
-{
-	assert(client != NULL);
-	assert(workspace < NB_WORKSPACES);
-
-	if (workspaces[workspace] == NULL)
-	{
-		client->next = client;
-		client->previous = client;
-	}
-	else
-	{
-		client->next = workspaces[workspace];
-		client->previous = workspaces[workspace]->previous;
-		client->next->previous = client;
-		client->previous->next = client;
-	}
-
-	workspaces[workspace] = client;
-}
-
-void client_create(xcb_window_t id)
-{
-	printf("client_create: id=%d\n", id);
-
-	// Request the information for the window
-
-	xcb_get_geometry_reply_t* geometry = xcb_get_geometry_reply(c, xcb_get_geometry_unchecked(c, id), NULL);
-	xcb_size_hints_t hints;
-	xcb_icccm_get_wm_normal_hints_reply(c, xcb_icccm_get_wm_normal_hints_unchecked(c, id), &hints,
-	                                    NULL);
-
-	client* new_client = emalloc(sizeof(client));
-
-	new_client->id = id;
-	new_client->x = geometry->x;
-	new_client->y = geometry->y;
-	new_client->width = geometry->width;
-	new_client->height = geometry->height;
-	new_client->min_width = hints.flags & XCB_ICCCM_SIZE_HINT_P_MIN_SIZE ? hints.min_width : 0;
-	new_client->min_height = hints.flags & XCB_ICCCM_SIZE_HINT_P_MIN_SIZE ? hints.min_height : 0;
-	new_client->max_width = hints.flags & XCB_ICCCM_SIZE_HINT_P_MAX_SIZE ? hints.max_width : 0xFFFF;
-	new_client->max_height = hints.flags & XCB_ICCCM_SIZE_HINT_P_MAX_SIZE ? hints.max_height : 0xFFFF;
-	new_client->maximized = false;
-
-	client_sanitize_dimensions(new_client);
-
-	printf("new window: id=%d x=%d y=%d width=%d height=%d min_width=%d min_height=%d max_width=%d max_height=%d\n", id,
-	       new_client->x, new_client->y, new_client->width, new_client->height, new_client->min_width, new_client->min_height,
-	       new_client->max_width, new_client->max_height);
-
-	xcb_configure_window(c, id, XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT | XCB_CONFIG_WINDOW_BORDER_WIDTH, (uint32_t[] )
-	                     { new_client->width, new_client->height, BORDER_WIDTH });
-
-	// Display the client
-	xcb_map_window(c, new_client->id);
-	xcb_flush(c);
-
-	free(geometry);
-
-	focus_unfocus();
-	client_add(new_client);
-	focus_apply();
-
-	printf("client_create: done\n");
-}
-
-// Find a client in the current workspace list
-client* client_find(xcb_window_t id)
-{
-	return client_find_workspace(id, current_workspace);
-}
-
-client* client_find_all_workspaces(xcb_window_t id)
-{
-	for (uint_fast8_t workspace = 0; workspace != NB_WORKSPACES; workspace++)
-	{
-		client* client = client_find_workspace(id, workspace);
-		if (client != NULL)
-			return client;
-	}
-
-	return NULL;
-}
-
-client* client_find_workspace(xcb_window_t id, uint_fast8_t workspace)
-{
-	assert(workspace < NB_WORKSPACES);
-
-	client* client = workspaces[workspace];
-
-	if (client != NULL)
-		do
-		{
-			if (client->id == id)
-				return client;
-		} while ((client = client->next) != workspaces[workspace]);
-
-	return NULL;
-}
-
-// Remove the focused client from the current workspace list
-client* client_remove()
-{
-	return client_remove_workspace(current_workspace);
-}
-
-// Remove the focused client from a workspace list
-client* client_remove_workspace(uint_fast8_t workspace)
-{
-	assert(workspace < NB_WORKSPACES);
-	assert(workspaces[workspace] != NULL);
-
-	client* client = workspaces[workspace];
-	if (client->next == client)
-		workspaces[workspace] = NULL;
-	else
-	{
-		client->previous->next = client->next;
-		client->next->previous = client->previous;
-		workspaces[workspace] = client->next;
-	}
-
-	return client;
-}
-
-void client_remove_all_workspaces(xcb_window_t id)
-{
-	for (uint_fast8_t workspace = 0; workspace != NB_WORKSPACES; workspace++)
-	{
-		client* client = client_find_workspace(id, workspace);
-		if (client != NULL)
-		{
-			if (client->next == client)
-				workspaces[workspace] = NULL;
-			else
-			{
-				client->previous->next = client->next;
-				client->next->previous = client->previous;
-
-				if (workspaces[workspace] == client)
-					workspaces[workspace] = client->next;
-			}
-		}
-	}
-}
-
-void client_sanitize_position(client* client)
-{
-	int16_t x = int16_in_range(client->x, 0, screen->width_in_pixels - client->width - BORDER_WIDTH_X2);
-	if (client->x != x)
-		client->x = x;
-
-	int16_t y = int16_in_range(client->y, 0, screen->height_in_pixels - client->height - BORDER_WIDTH_X2);
-	if (client->y != y)
-		client->y = y;
-}
-
-void client_sanitize_dimensions(client* client)
-{
-	uint16_t width = uint16_in_range(client->width, client->min_width, client->max_width);
-	width = uint16_in_range(width, 0, screen->width_in_pixels - client->x - BORDER_WIDTH_X2);
-	if (client->width != width)
-		client->width = width;
-
-	uint16_t height = uint16_in_range(client->height, client->min_height, client->max_height);
-	height = uint16_in_range(height, 0, screen->height_in_pixels - client->y - BORDER_WIDTH_X2);
-	if (client->height != height)
-		client->height = height;
-}
-
-void client_kill(__attribute__((unused))const Arg* arg)
-{
-	printf("=======[ user action: client_kill ]=======\n");
-
-	// No client are focused
-	if (workspaces[current_workspace] == NULL)
-		return; // Nothing to be done
-
-	if (!xcb_send_atom(workspaces[current_workspace], wm_delete_window))
-	{
-		// The client does not support WM_DELETE, let's kill it
-		xcb_kill_client(c, workspaces[current_workspace]->id);
-	}
-
-	xcb_flush(c);
-}
-
-void client_toggle_maximize(__attribute__((unused))const Arg* arg)
-{
-	printf("=======[ user action: client_toggle_maximize ]=======\n");
-
-	// No client are focused
-	if (workspaces[current_workspace] == NULL)
-		return; // Nothing to be done
-
-	client* client = workspaces[current_workspace];
-
-	if (client->maximized)
-		client_unmaximize(client);
-	else
-		client_maximize(client);
-
-	xcb_flush(c);
-}
-
-void client_maximize(client* client)
-{
-	assert(client != NULL);
-	assert(!client->maximized);
-
-	client->maximized = true;
-
-	uint32_t values[] = { 0, 0, screen->width_in_pixels, screen->height_in_pixels, 0 };
-	xcb_configure_window(c, focused_client->id, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT | XCB_CONFIG_WINDOW_BORDER_WIDTH, values);
-}
-
-void client_unmaximize(client* client)
-{
-	assert(client != NULL);
-	assert(client->maximized);
-
-	client->maximized = false;
-
-	uint32_t values[] = { client->x, client->y, client->width, client->height, BORDER_WIDTH };
-	xcb_configure_window(c, focused_client->id, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT | XCB_CONFIG_WINDOW_BORDER_WIDTH, values);
-}
-
-void client_grab_buttons(client* client, bool focused)
-{
-	uint16_t modifiers[] = { 0, numlockmask, XCB_MOD_MASK_LOCK, numlockmask | XCB_MOD_MASK_LOCK };
-
-	xcb_ungrab_button(c, XCB_BUTTON_INDEX_ANY, client->id, XCB_MOD_MASK_ANY);
-
-	// The client is not the focused one -> grab everything
-	if (!focused)
-	{
-		xcb_grab_button(c, 1, client->id, BUTTON_EVENT_MASK, XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, root, XCB_NONE,
-		                XCB_BUTTON_INDEX_ANY, XCB_MOD_MASK_ANY);
-	}
-
-	// The client is the focused one -> grab only the configured buttons
-	else
-	{
-		for (unsigned int i = 0; i != LENGTH(buttons); i++)
-		{
-			Button button = buttons[i];
-
-			for (unsigned int j = 0; j != LENGTH(modifiers); j++)
-			{
-				xcb_grab_button(c, 0, client->id, BUTTON_EVENT_MASK, XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC, root, XCB_NONE,
-				                button.keysym, button.modifiers | modifiers[j]);
-			}
 		}
 	}
 }
@@ -628,208 +282,6 @@ void focus_unfocus()
  * Handling events from the event loop
  */
 
-void handle_button_press(xcb_button_press_event_t* event)
-{
-	// Click on the root window
-	if (event->event == event->root && event->child == 0)
-		return; // Nothing to be done
-
-	xcb_window_t window = event->event == event->root ? event->child : event->event;
-
-	// The window clicked is not the one in focus, we have to focus it
-	if (workspaces[current_workspace] == NULL || window != workspaces[current_workspace]->id)
-	{
-		client* client = client_find(window);
-		assert(client != NULL);
-
-		focus_unfocus();
-		workspaces[current_workspace] = client;
-		focus_apply();
-	}
-
-	for (uint_fast8_t i = 0; i < LENGTH(buttons); i++)
-	{
-		if (event->detail == buttons[i].keysym && CLEANMASK(buttons[i].modifiers) == CLEANMASK(event->state))
-		{
-			previous_x = event->root_x;
-			previous_y = event->root_y;
-
-			buttons[i].func(&buttons[i].arg);
-			break;
-		}
-	}
-}
-
-void handle_button_release(__attribute__((unused)) xcb_button_release_event_t* event)
-{
-	// We were not moving or resizing the focused client
-	if (!moving && !resizing)
-		return; // Nothing to be done
-
-	xcb_ungrab_pointer(c, XCB_CURRENT_TIME);
-	xcb_flush(c);
-
-	moving = false;
-	resizing = false;
-}
-
-void handle_configure_request(xcb_configure_request_event_t* event)
-{
-	client* client = client_find_all_workspaces(event->window);
-
-	if (client != NULL)
-	{
-		// The client is maximized
-		if (client->maximized)
-			return; // Nothing to be done
-
-		if (event->value_mask & XCB_CONFIG_WINDOW_X)
-			client->x = event->x;
-		if (event->value_mask & XCB_CONFIG_WINDOW_Y)
-			client->y = event->y;
-		if (event->value_mask & XCB_CONFIG_WINDOW_WIDTH)
-			client->width = event->width;
-		if (event->value_mask & XCB_CONFIG_WINDOW_HEIGHT)
-			client->height = event->height;
-
-		// Ignored: XCB_CONFIG_WINDOW_BORDER_WIDTH, XCB_CONFIG_WINDOW_SIBLING, XCB_CONFIG_WINDOW_STACK_MODE
-
-		client_sanitize_position(client);
-		client_sanitize_dimensions(client);
-
-		uint32_t values[4] = { client->x, client->y, client->width, client->height };
-		xcb_configure_window(c, client->id,
-		                     XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y | XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, values);
-		xcb_flush(c);
-	}
-
-	// We don't know the client -> apply the requested change
-	else
-	{
-		uint16_t value_mask = 0;
-		uint32_t value_list[7];
-		int8_t i = 0;
-
-		if (event->value_mask & XCB_CONFIG_WINDOW_X)
-		{
-			value_mask |= XCB_CONFIG_WINDOW_X;
-			value_list[i++] = event->x;
-		}
-		if (event->value_mask & XCB_CONFIG_WINDOW_Y)
-		{
-			value_mask |= XCB_CONFIG_WINDOW_Y;
-			value_list[i++] = event->y;
-		}
-		if (event->value_mask & XCB_CONFIG_WINDOW_WIDTH)
-		{
-			value_mask |= XCB_CONFIG_WINDOW_WIDTH;
-			value_list[i++] = event->width;
-		}
-		if (event->value_mask & XCB_CONFIG_WINDOW_HEIGHT)
-		{
-			value_mask |= XCB_CONFIG_WINDOW_HEIGHT;
-			value_list[i++] = event->height;
-		}
-		if (event->value_mask & XCB_CONFIG_WINDOW_SIBLING)
-		{
-			value_mask |= XCB_CONFIG_WINDOW_SIBLING;
-			value_list[i++] = event->sibling;
-		}
-		if (event->value_mask & XCB_CONFIG_WINDOW_STACK_MODE)
-		{
-			value_mask |= XCB_CONFIG_WINDOW_STACK_MODE;
-			value_list[i++] = event->stack_mode;
-		}
-		if (i != 0)
-		{
-			xcb_configure_window(c, event->window, value_mask, value_list);
-			xcb_flush(c);
-		}
-	}
-}
-
-void handle_destroy_notify(xcb_destroy_notify_event_t* event)
-{
-	client_remove_all_workspaces(event->window);
-	if (focused_client != NULL)
-		focus_apply();
-}
-
-void handle_key_press(xcb_key_press_event_t* event)
-{
-	xcb_keysym_t keysym = xcb_get_keysym(event->detail);
-
-	for (uint_fast8_t i = 0; i < LENGTH(keys); i++)
-	{
-		if (keysym == keys[i].keysym && CLEANMASK(keys[i].modifiers) == CLEANMASK(event->state))
-		{
-			keys[i].func(&keys[i].arg);
-			break;
-		}
-	}
-}
-
-void handle_map_request(xcb_map_request_event_t* event)
-{
-	client_create(event->window);
-}
-
-void handle_unmap_notify(xcb_unmap_notify_event_t* event)
-{
-	client* client = client_find_all_workspaces(event->window);
-
-	// We don't know this client
-	if (client == NULL)
-		return; // Nothing to be done
-
-	//  true if this came from a SendEvent request
-	bool send_event = event->response_type & 0x80;
-	if (!send_event)
-		return; // Nothing to be done
-
-	client_remove_all_workspaces(event->window);
-	if (focused_client != NULL)
-		focus_apply();
-}
-
-void handle_motion_notify(xcb_motion_notify_event_t* event)
-{
-	client* client = workspaces[current_workspace];
-
-	assert(moving || resizing);
-	assert(client != NULL);
-	assert(client->id != root);
-
-	if (client->maximized)
-		client_unmaximize(client);
-
-	int16_t diff_x = event->root_x - previous_x;
-	int16_t diff_y = event->root_y - previous_y;
-	previous_x = event->root_x;
-	previous_y = event->root_y;
-
-	if (moving)
-	{
-		client->x += diff_x;
-		client->y += diff_y;
-		client_sanitize_position(client);
-
-		uint32_t values[2] = { client->x, client->y };
-		xcb_configure_window(c, client->id, XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y, values);
-	}
-	else if (resizing)
-	{
-		client->width += diff_x;
-		client->height += diff_y;
-		client_sanitize_dimensions(client);
-
-		uint32_t values[2] = { client->width, client->height };
-		xcb_configure_window(c, client->id, XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT, values);
-	}
-
-	xcb_flush(c);
-}
-
 void quit(__attribute__((unused))const Arg* arg)
 {
 	printf("=======[ user action: quit ]=======\n");
@@ -877,19 +329,6 @@ void setup_keyboard()
 	free(reply);
 }
 
-void setup_events()
-{
-	uint32_t values[] = { XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT | XCB_EVENT_MASK_STRUCTURE_NOTIFY
-		                  | XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY };
-
-	xcb_change_window_attributes_checked(c, root, XCB_CW_EVENT_MASK, values);
-
-	for (uint_fast8_t i = 0; i != LENGTH(keys); i++)
-		xcb_register_key_events(keys[i]);
-
-	xcb_flush(c);
-}
-
 void setup_screen()
 {
 	// Retrieve the children of the root window
@@ -926,13 +365,13 @@ void workspace_next(__attribute__((unused))const Arg* arg)
 {
 	printf("=======[ user action: workspace_next ]=======\n");
 
-	workspace_set(current_workspace + 1 == NB_WORKSPACES ? 0 : current_workspace + 1);
+	workspace_set(current_workspace + 1 == workspaces_length ? 0 : current_workspace + 1);
 }
 
 void workspace_previous(__attribute__((unused))const Arg* arg)
 {
 	printf("=======[ user action: workspace_previous ]=======\n");
-	workspace_set(current_workspace == 0 ? NB_WORKSPACES - 1 : current_workspace - 1);
+	workspace_set(current_workspace == 0 ? workspaces_length - 1 : current_workspace - 1);
 }
 
 void workspace_send(const Arg* arg)
@@ -1031,7 +470,7 @@ int main(void)
 	 * Initialize variables
 	 */
 
-	for (uint_fast8_t i = 0; i != NB_WORKSPACES; i++)
+	for (uint_fast8_t i = 0; i != workspaces_length; i++)
 		workspaces[i] = NULL;
 
 	wm_protocols = xcb_get_atom(WM_PROTOCOLS);
@@ -1044,7 +483,7 @@ int main(void)
 	// Event loop
 	eventLoop();
 
-	for (uint_fast8_t i = 0; i != NB_WORKSPACES; i++)
+	for (uint_fast8_t i = 0; i != workspaces_length; i++)
 	{
 		while (workspaces[i] != NULL)
 		{

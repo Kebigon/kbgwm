@@ -40,6 +40,6 @@ You can edit all those settings via the config.h file.
 
 ## Thanks
 
-Thanks to the [suckless](https://suckless.org) project
-Thanks to venam for creating [2bwm](https://github.com/venam/2bwm)
-Thanks to Michael Cardell for creating [mcwm](https://hack.org/mc/projects/mcwm)
+- Thanks to the [suckless](https://suckless.org) project
+- Thanks to venam for creating [2bwm](https://github.com/venam/2bwm)
+- Thanks to Michael Cardell for creating [mcwm](https://hack.org/mc/projects/mcwm)

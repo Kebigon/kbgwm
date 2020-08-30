@@ -1,4 +1,4 @@
-OBJ = kbgwm.o xcbutils.o
+OBJ = kbgwm.o xcbutils.o events.o client.o
 
 CFLAGS+=-g -std=c99 -Wall -Wextra -I/usr/local/include
 LDFLAGS+=-L/usr/local/lib -lxcb -lxcb-icccm -lxcb-keysyms

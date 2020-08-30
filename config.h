@@ -1,3 +1,28 @@
+/*
+ * kbgwm, a sucklessy floating window manager
+ * Copyright (C) 2020 Kebigon
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
+
+#ifndef KBGWM_CONFIG_H
+#define KBGWM_CONFIG_H
+
+#include "client.h"
+#include "types.h"
+#include <X11/keysym.h>
+
 #define MODKEY XCB_MOD_MASK_1
 #define SHIFT  XCB_MOD_MASK_SHIFT
 
@@ -19,8 +44,7 @@ static const char* menucmd[] = { "dmenu_run", NULL };
 	{ MODKEY|XCB_MOD_MASK_SHIFT, KEY, workspace_send,   {.i = WORKSPACE} }, \
 	{ MODKEY,                    KEY, workspace_change, {.i = WORKSPACE} },
 
-static Key keys[] =
-{
+const Key keys[] = {
 	{ MODKEY,         XK_Return,    start,                  { .cmd = termcmd } },
 	{ MODKEY,         XK_p,         start,                  { .cmd = menucmd } },
 	{ MODKEY,         XK_Page_Up,   workspace_previous,     { 0 } },
@@ -44,8 +68,15 @@ static Key keys[] =
 	WORKSPACEKEYS(XK_End, 9)
 };
 
-static Button buttons[] =
-{
+const Button buttons[] = {
 	{ MODKEY, XCB_BUTTON_INDEX_1, mousemove,   { 0 } },
 	{ MODKEY, XCB_BUTTON_INDEX_3, mouseresize, { 0 } },
 };
+
+const uint_least8_t keys_length = LENGTH(keys);
+const uint_least8_t buttons_length = LENGTH(buttons);
+const uint_least8_t workspaces_length = NB_WORKSPACES;
+const uint_least8_t border_width = BORDER_WIDTH;
+const uint_least8_t border_width_x2 = (border_width << 1);
+
+#endif /* KBGWM_CONFIG_H */

@@ -1,7 +1,27 @@
-#ifndef TYPES_H_
-#define TYPES_H_
+/*
+ * kbgwm, a sucklessy floating window manager
+ * Copyright (C) 2020 Kebigon
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
+#ifndef KBGWM_TYPES_H
+#define KBGWM_TYPES_H
+
+#include <stdint.h>
 #include <stdbool.h>
+#include <xcb/xproto.h>
 
 typedef union
 {
@@ -26,17 +46,4 @@ typedef struct
 	const Arg arg;
 } Button;
 
-typedef struct client_t client;
-struct client_t
-{
-	xcb_window_t id;
-	int16_t x, y;
-	uint16_t width, height;
-	int32_t min_width, min_height;
-	int32_t max_width, max_height;
-	bool maximized;
-	client* previous;
-	client* next;
-};
-
-#endif /* TYPES_H_ */
+#endif /* KBGWM_TYPES_H */
