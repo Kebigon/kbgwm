@@ -260,7 +260,7 @@ void focus_next(const Arg* arg)
 
 	focus_unfocus();
 	workspaces[current_workspace] = new_focus;
-	focus_apply(new_focus);
+	focus_apply();
 }
 
 // Remove the focus from the current client
