@@ -21,7 +21,7 @@
 
 #include <xcb/xcb.h>
 
-void handle_event(xcb_generic_event_t*);
+void handle_event(xcb_generic_event_t *);
 void setup_events();
 
 #endif /* KBGWM_EVENTS_H */

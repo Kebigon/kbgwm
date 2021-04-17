@@ -19,31 +19,30 @@
 #ifndef KBGWM_TYPES_H
 #define KBGWM_TYPES_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <xcb/xproto.h>
 
-typedef union
-{
-	const bool b;
-	const uint_least8_t i;
-	const char** cmd;
+typedef union {
+    const bool b;
+    const uint_least8_t i;
+    const char **cmd;
 } Arg;
 
 typedef struct
 {
-	uint16_t modifiers;
-	xcb_keysym_t keysym;
-	void (* func)(const Arg*);
-	const Arg arg;
+    uint16_t modifiers;
+    xcb_keysym_t keysym;
+    void (*func)(const Arg *);
+    const Arg arg;
 } Key;
 
 typedef struct
 {
-	uint16_t modifiers;
-	xcb_button_t keysym;
-	void (* func)(const Arg*);
-	const Arg arg;
+    uint16_t modifiers;
+    xcb_button_t keysym;
+    void (*func)(const Arg *);
+    const Arg arg;
 } Button;
 
 #endif /* KBGWM_TYPES_H */

@@ -19,38 +19,39 @@
 #ifndef KBGWM_KBGWM_H
 #define KBGWM_KBGWM_H
 
-void start(const Arg* arg);
-void mousemove(const Arg* arg);
-void mouseresize(const Arg* arg);
+#include "client.h"
+#include "types.h"
+#include <stdbool.h>
+
+void start(const Arg *arg);
+void mousemove(const Arg *arg);
+void mouseresize(const Arg *arg);
 
 void focus_apply();
-void focus_next(const Arg*);
+void focus_next(const Arg *);
 void focus_unfocus();
-void quit(const Arg*);
-void workspace_change(const Arg*);
-void workspace_next(const Arg*);
-void workspace_previous(const Arg*);
-void workspace_send(const Arg*);
+void quit(const Arg *);
+void workspace_change(const Arg *);
+void workspace_next(const Arg *);
+void workspace_previous(const Arg *);
+void workspace_send(const Arg *);
 void workspace_set(uint_fast8_t);
-
-#include <stdbool.h>
-#include "types.h"
 
 #define focused_client workspaces[current_workspace]
 
 extern bool running;
 extern bool moving;
 extern bool resizing;
-extern xcb_connection_t* c;
+extern xcb_connection_t *c;
 extern xcb_window_t root;
-extern xcb_screen_t* screen;
+extern xcb_screen_t *screen;
 extern uint_least16_t previous_x;
 extern uint_least16_t previous_y;
 extern uint16_t numlockmask;
 extern xcb_atom_t wm_protocols;
 extern xcb_atom_t wm_delete_window;
 extern uint_fast8_t current_workspace;
-extern client* workspaces[];
+extern client *workspaces[];
 
 extern const Key keys[];
 extern const Button buttons[];

@@ -24,7 +24,7 @@
 #include <X11/keysym.h>
 
 #define MODKEY XCB_MOD_MASK_1
-#define SHIFT  XCB_MOD_MASK_SHIFT
+#define SHIFT XCB_MOD_MASK_SHIFT
 
 #define FOCUS_COLOR 0xFF0000
 #define UNFOCUS_COLOR 0x005577
@@ -37,9 +37,10 @@
  */
 #define NB_WORKSPACES 10
 
-static const char* termcmd[] = { "xterm", NULL };
-static const char* menucmd[] = { "dmenu_run", NULL };
+static const char *termcmd[] = {"xterm", NULL};
+static const char *menucmd[] = {"dmenu_run", NULL};
 
+// clang-format off
 #define WORKSPACEKEYS(KEY,WORKSPACE) \
 	{ MODKEY|XCB_MOD_MASK_SHIFT, KEY, workspace_send,   {.i = WORKSPACE} }, \
 	{ MODKEY,                    KEY, workspace_change, {.i = WORKSPACE} },
@@ -72,6 +73,7 @@ const Button buttons[] = {
 	{ MODKEY, XCB_BUTTON_INDEX_1, mousemove,   { 0 } },
 	{ MODKEY, XCB_BUTTON_INDEX_3, mouseresize, { 0 } },
 };
+// clang-format on
 
 const uint_least8_t keys_length = LENGTH(keys);
 const uint_least8_t buttons_length = LENGTH(buttons);
