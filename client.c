@@ -92,12 +92,15 @@ void client_create(xcb_window_t id)
     new_client->y = geometry->y;
     new_client->width = geometry->width;
     new_client->height = geometry->height;
-    new_client->min_width = hints.flags & XCB_ICCCM_SIZE_HINT_P_MIN_SIZE ? hints.min_width : 0;
-    new_client->min_height = hints.flags & XCB_ICCCM_SIZE_HINT_P_MIN_SIZE ? hints.min_height : 0;
-    new_client->max_width = hints.flags & XCB_ICCCM_SIZE_HINT_P_MAX_SIZE ? hints.max_width : 0xFFFF;
-    new_client->max_height =
-        hints.flags & XCB_ICCCM_SIZE_HINT_P_MAX_SIZE ? hints.max_height : 0xFFFF;
     new_client->maximized = false;
+
+    const bool min_size = hints.flags & XCB_ICCCM_SIZE_HINT_P_MIN_SIZE;
+    new_client->min_width = min_size ? hints.min_width : 0;
+    new_client->min_height = min_size ? hints.min_height : 0;
+
+    const bool max_size = hints.flags & XCB_ICCCM_SIZE_HINT_P_MAX_SIZE;
+    new_client->max_width = max_size ? hints.max_width : INT32_MAX;
+    new_client->max_height = max_size ? hints.max_height : INT32_MAX;
 
     client_sanitize_dimensions(new_client);
 
@@ -295,8 +298,6 @@ void client_unmaximize(client *client)
 
 void client_grab_buttons(client *client, bool focused)
 {
-    uint16_t modifiers[] = {0, numlockmask, XCB_MOD_MASK_LOCK, numlockmask | XCB_MOD_MASK_LOCK};
-
     xcb_ungrab_button(c, XCB_BUTTON_INDEX_ANY, client->id, XCB_MOD_MASK_ANY);
 
     // The client is not the focused one -> grab everything
@@ -310,11 +311,13 @@ void client_grab_buttons(client *client, bool focused)
     // The client is the focused one -> grab only the configured buttons
     else
     {
-        for (unsigned int i = 0; i != buttons_length; i++)
+        for (uint_fast8_t i = 0; i != buttons_length; i++)
         {
+            uint16_t modifiers[] = {0, numlockmask, XCB_MOD_MASK_LOCK,
+                                    numlockmask | XCB_MOD_MASK_LOCK};
             Button button = buttons[i];
 
-            for (unsigned int j = 0; j != LENGTH(modifiers); j++)
+            for (uint_fast8_t j = 0; j != LENGTH(modifiers); j++)
             {
                 xcb_grab_button(c, 0, client->id, BUTTON_EVENT_MASK, XCB_GRAB_MODE_ASYNC,
                                 XCB_GRAB_MODE_ASYNC, root, XCB_NONE, button.keysym,

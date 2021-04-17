@@ -34,7 +34,7 @@ void *emalloc(size_t size)
 {
     void *p;
 
-    printf("client size=%zd\n", size);
+    printf("client size=%zu\n", size);
 
     if (!(p = malloc(size)))
     {

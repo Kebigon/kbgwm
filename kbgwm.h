@@ -16,8 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef KBGWM_KBGWM_H
-#define KBGWM_KBGWM_H
+#pragma once
 
 #include "client.h"
 #include "types.h"
@@ -61,5 +60,3 @@ extern const uint_least8_t buttons_length;
 extern const uint_least8_t workspaces_length;
 extern const uint_least8_t border_width;
 extern const uint_least8_t border_width_x2;
-
-#endif /* KBGWM_KBGWM_H */

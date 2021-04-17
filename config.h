@@ -16,8 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef KBGWM_CONFIG_H
-#define KBGWM_CONFIG_H
+#pragma once
 
 #include "client.h"
 #include "types.h"
@@ -80,5 +79,3 @@ const uint_least8_t buttons_length = LENGTH(buttons);
 const uint_least8_t workspaces_length = NB_WORKSPACES;
 const uint_least8_t border_width = BORDER_WIDTH;
 const uint_least8_t border_width_x2 = (border_width << 1);
-
-#endif /* KBGWM_CONFIG_H */

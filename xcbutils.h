@@ -16,8 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef KBGWM_XCBUTILS_H
-#define KBGWM_XCBUTILS_H
+#pragma once
 
 #define LENGTH(X) (sizeof X / sizeof X[0])
 
@@ -48,5 +47,3 @@ xcb_keysym_t xcb_get_keysym(xcb_keycode_t);
 
 xcb_atom_t xcb_get_atom(const char *);
 bool xcb_send_atom(client *, xcb_atom_t);
-
-#endif /* KBGWM_XCBUTILS_H */

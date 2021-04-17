@@ -16,8 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef KBGWM_TYPES_H
-#define KBGWM_TYPES_H
+#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -44,5 +43,3 @@ typedef struct
     void (*func)(const Arg *);
     const Arg arg;
 } Button;
-
-#endif /* KBGWM_TYPES_H */

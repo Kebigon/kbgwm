@@ -51,7 +51,7 @@ static inline void debug_print_globals()
 {
     printf("current_workspace=%d\n", current_workspace);
 
-    for (int workspace = 0; workspace != workspaces_length; workspace++)
+    for (uint_fast8_t workspace = 0; workspace != workspaces_length; workspace++)
     {
         if (workspaces[workspace] == NULL)
             printf("%d\tNULL\n", workspace);

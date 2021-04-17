@@ -16,8 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef KBGWM_CLIENT_H
-#define KBGWM_CLIENT_H
+#pragma once
 
 #include "types.h"
 #include <stdbool.h>
@@ -50,5 +49,3 @@ void client_sanitize_dimensions(client *);
 void client_remove_all_workspaces(xcb_window_t);
 client *client_find_all_workspaces(xcb_window_t);
 client *client_find_workspace(xcb_window_t, uint_fast8_t);
-
-#endif /* KBGWM_CLIENT_H */

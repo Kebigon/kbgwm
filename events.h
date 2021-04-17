@@ -16,12 +16,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef KBGWM_EVENTS_H
-#define KBGWM_EVENTS_H
+#pragma once
 
 #include <xcb/xcb.h>
 
 void handle_event(xcb_generic_event_t *);
 void setup_events();
-
-#endif /* KBGWM_EVENTS_H */
